@@ -9,7 +9,14 @@ in this file, app.py or the agent has to learn about it.
 import logging
 from typing import Dict
 
-from config import LANGUAGES, TRANSLATOR_URL, Language, get_language
+from config import (
+    ELEVENLABS_API_KEY,
+    LANGUAGES,
+    TRANSLATOR_URL,
+    Language,
+    get_language,
+)
+from elevenlabs_tts import ElevenLabsTextToSpeech
 from local_stt import LocalSpeechToText
 from local_tts import LocalTextToSpeech
 from nllb_translator import NLLBTranslator, PivotTranslator
@@ -42,7 +49,17 @@ def _build_services():
                 fallback_url=lang.stt_fallback_url,
                 language_code=lang.whisper_code,
             )
-        if lang.can_speak:
+        if not lang.can_speak:
+            continue
+
+        if lang.tts_provider == "elevenlabs":
+            _tts_services[key] = ElevenLabsTextToSpeech(
+                api_key=ELEVENLABS_API_KEY,
+                model=lang.tts_model,
+                voice=lang.tts_voice,
+                language_code=lang.whisper_code,
+            )
+        else:
             _tts_services[key] = LocalTextToSpeech(
                 base_url=lang.tts_url,
                 model=lang.tts_model,

@@ -16,6 +16,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# ElevenLabs serves any language its models cover from a single endpoint, so it
+# is configured once here rather than per language. A language opts into it with
+# <PREFIX>_TTS_PROVIDER=elevenlabs.
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+
+
 # ── Language registry ────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -42,6 +48,7 @@ class Language:
     needs_translation: bool = False  # True => Gemma answers in English, NLLB renders the reply
     rtl: bool = False                # right-to-left script (Arabic)
     forced_on: bool = False          # <PREFIX>_ENABLED=true — text-only, no speech endpoints
+    tts_provider: str = "openai"     # "openai" (self-hosted) or "elevenlabs"
 
     @property
     def enabled(self) -> bool:
@@ -57,16 +64,22 @@ class Language:
         """The service has a voice that actually pronounces this language.
 
         Checked before ever synthesising. A TTS model with no adapter for a
-        language does not fail loudly — measured against this deployment, it
-        produces fluent-sounding audio of text the user never wrote. Sending
-        that to somebody in an emergency is worse than sending nothing, so a
-        language without its own voice is text-only by construction.
+        language does not fail loudly — measured against the self-hosted
+        deployment, it produces fluent-sounding audio of text the user never
+        wrote. Sending that to somebody in an emergency is worse than sending
+        nothing, so a language with no voice is text-only by construction.
+
+        ElevenLabs needs no per-language URL: one API serves every language it
+        supports, so having the key is what makes the language speakable.
         """
+        if self.tts_provider == "elevenlabs":
+            return bool(ELEVENLABS_API_KEY)
         return bool(self.tts_url)
 
 
 def _lang(key, label, button_id, whisper_code, env_prefix, *,
           default_tts_model="", default_tts_voice="female",
+          default_tts_provider="openai",
           needs_translation=False, rtl=False) -> Language:
     """Build a Language from the <PREFIX>_* environment variables."""
     def g(suffix, default=""):
@@ -87,6 +100,7 @@ def _lang(key, label, button_id, whisper_code, env_prefix, *,
         needs_translation=needs_translation,
         rtl=rtl,
         forced_on=g("ENABLED", "").strip().lower() in ("1", "true", "yes"),
+        tts_provider=g("TTS_PROVIDER", default_tts_provider).strip().lower(),
     )
 
 
@@ -104,19 +118,19 @@ YORUBA = _lang(
     needs_translation=True,
 )
 
-# Arabic is TEXT-ONLY on this deployment. Gemma reads and writes Arabic well,
-# but the Chatterbox TTS service has adapters for en/yo/ha/ig only: asked for
-# "ar" it returns 400, and given Arabic text untagged it emits confident audio
-# of words the user never wrote (verified by transcribing its own output back).
-# So Arabic is switched on with ARABIC_ENABLED=true and no TTS endpoint, which
-# leaves can_speak False and keeps replies in text.
+# Arabic speaks through ElevenLabs rather than the self-hosted Chatterbox
+# service, which has adapters for en/yo/ha/ig only: asked for "ar" it returns
+# 400, and handed Arabic text untagged it emits confident audio of words the
+# user never wrote. ElevenLabs renders the same sentence correctly — both were
+# checked by transcribing the generated audio back and comparing.
 #
-# When a TTS model that genuinely speaks Arabic is available, set
-# ARABIC_TTS_BASE_URL and voice turns on by itself. Same for ARABIC_STT_API_URL
-# and inbound voice notes.
+# Arabic speech-to-text is NOT configured, so an Arabic voice note is answered
+# with a request to type instead. Outbound voice works, inbound does not.
 ARABIC = _lang(
     "arabic", "العربية", "lang_ar", "ar", "ARABIC",
-    default_tts_model="arabic-tts-model",
+    default_tts_model="eleven_multilingual_v2",
+    default_tts_voice="EXAVITQu4vr4xnSDxMaL",   # Sarah — calm, reassuring
+    default_tts_provider="elevenlabs",
     needs_translation=True,
     rtl=True,
 )
