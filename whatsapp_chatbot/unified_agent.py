@@ -114,11 +114,6 @@ OFF_TOPIC_REFUSAL = {
         "والحرائق والطرق المتضررة والإشعارات المزيفة ومن يطالبون بأموال دون وجه "
         "حق. ما الذي يحدث في مكانك؟"
     ),
-    "french": (
-        "Je suis ComGuard. J'aide pour les problèmes de sécurité et les arnaques — "
-        "inondations, incendies, routes endommagées, faux avis officiels, personnes "
-        "qui réclament de l'argent sans droit. Que se passe-t-il chez vous ?"
-    ),
 }
 # ⚠️ The Yoruba and Arabic lines above are best-effort and need a native speaker
 # to review them before production use.
@@ -183,8 +178,6 @@ _AFFIRMATIONS = {
     "yoruba": {"beeni", "bee ni", "ooto ni", "ootoni", "eeni", "eni", "o daa",
                "odaa", "mo gba", "nitooto", "ehn", "een"},
     "arabic": {"naam", "aywa", "ajal", "sah", "tamam"},
-    "french": {"oui", "ouais", "exact", "c est ca", "c est correct", "correct",
-               "tout a fait", "d accord", "voila"},
     "english": {"yes", "yeah", "yep", "yup", "correct", "right", "true", "ok",
                 "okay", "sure", "exactly", "that is correct", "thats correct"},
 }
@@ -192,8 +185,6 @@ _AFFIRMATIONS = {
 _NEGATIONS = {
     "yoruba": {"rara", "beeko", "bee ko", "ko ri be", "kii se"},
     "arabic": {"la", "laa", "kalla", "mish sah"},
-    "french": {"non", "pas du tout", "faux", "incorrect", "c est faux",
-               "ce n est pas ca"},
     "english": {"no", "nope", "nah", "wrong", "incorrect", "not correct",
                 "that is wrong", "thats wrong"},
 }
@@ -204,8 +195,6 @@ _DISTRESS_WORDS = {
     "english": {"help", "help me", "emergency", "danger", "sos", "please help"},
     "yoruba": {"egba mi", "e gba mi", "iranlowo", "ewu", "e ran mi lowo"},
     "arabic": {"musaada", "najda", "khatar", "saaeduni"},
-    "french": {"aidez moi", "au secours", "secours", "urgence", "danger",
-               "a l aide", "aide"},
 }
 
 

@@ -121,22 +121,7 @@ ARABIC = _lang(
     rtl=True,
 )
 
-# French is TEXT-ONLY for the same reason, though it fails differently. The TTS
-# rejects language "fr" outright; fed French untagged it produces recognisably
-# French audio, but unreliably — in testing "Ne passez pas par cette route"
-# came back as "ni pas ses passes passes de taroute", losing the negation. A
-# safety instruction whose "do not" dissolves is worse than no audio at all,
-# so French replies stay in text until a real French voice is configured.
-#
-# Worth having: French is the working language across Senegal, Côte d'Ivoire,
-# Mali, Cameroon, Niger, Burkina Faso, Benin, Togo, Guinea and the DRC.
-FRENCH = _lang(
-    "french", "Français", "lang_fr", "fr", "FRENCH",
-    default_tts_model="french-tts-model",
-    needs_translation=True,
-)
-
-_ALL_LANGUAGES = [ENGLISH, YORUBA, ARABIC, FRENCH]
+_ALL_LANGUAGES = [ENGLISH, YORUBA, ARABIC]
 
 #: Only languages whose speech endpoints are configured. English is forced in so
 #: the service is never left with an empty language menu.

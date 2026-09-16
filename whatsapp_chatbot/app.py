@@ -170,20 +170,6 @@ UI_STRINGS = {
             "rẹ ti wá kúrò. Agbègbè gbogbogbò nìkan ni a ó pín fún àwọn aláṣẹ.\n\n"
             "Tẹ *Approve* láti bẹ̀rẹ̀."
         ),
-        "french": (
-            "👋 *Bienvenue sur ComGuard*\n\n"
-            "Je vous aide à signaler deux types de problèmes et à vous protéger :\n\n"
-            "🌊 *Urgences* — inondation, incendie, pont ou route effondrée, route bloquée\n"
-            "🚨 *Arnaques* — faux avis officiels, faux collecteurs d'impôts, "
-            "barrages routiers illégaux, reçus falsifiés\n\n"
-            "Envoyez-moi une photo, un message vocal, ou écrivez simplement ce qui se passe.\n\n"
-            "*Votre confidentialité :* votre numéro de téléphone n'est jamais joint à un "
-            "signalement. Les données de localisation des photos sont supprimées. Seule une "
-            "zone générale est transmise aux autorités.\n\n"
-            "En continuant, vous acceptez les conditions d'utilisation et la politique de "
-            "confidentialité.\n\n"
-            "Appuyez sur *Approve* pour commencer."
-        ),
     },
     "ready": {
         "english": (
@@ -204,15 +190,6 @@ UI_STRINGS = {
             "O lè fi wọ́n ránṣẹ́ ní ọ̀kọ̀ọ̀kan — èmi yóò kó wọn pọ̀.\n\n"
             f"Tí ẹnikẹ́ni bá wà nínú ewu báyìí, kọ́kọ́ pe {EMERGENCY_NUMBERS}."
         ),
-        "french": (
-            "✅ Tout est prêt.\n\n"
-            "Envoyez-moi :\n"
-            "📷 une *photo* de ce que vous voyez\n"
-            "🎤 un *message vocal* qui l'explique\n"
-            "📍 votre *position* (📎 → Position) pour que je transmette au bon service\n\n"
-            "Vous pouvez les envoyer un par un — je les rassemble.\n\n"
-            f"Si quelqu'un est en danger immédiat, appelez d'abord {EMERGENCY_NUMBERS}."
-        ),
     },
     "need_location": {
         "english": (
@@ -225,12 +202,6 @@ UI_STRINGS = {
             "A ó lo ó láti kìlọ̀ fún àwọn tí ó wà nítòsí nìkan, a ó sì sọ ọ́ di "
             "agbègbè gbogbogbò kí ẹlòmíràn tó rí i. O lè fo èyí."
         ),
-        "french": (
-            "📍 Si vous pouvez le faire sans danger, partagez votre position — "
-            "appuyez sur 📎 puis *Position*.\n"
-            "Elle sert uniquement à prévenir les personnes proches, et est réduite à une "
-            "zone générale avant que quiconque la voie. Vous pouvez passer cette étape."
-        ),
     },
     "report_filed": {
         "english": (
@@ -241,20 +212,14 @@ UI_STRINGS = {
             "📋 A ti kọ ìròyìn rẹ sílẹ̀ gẹ́gẹ́ bí *{report_id}*. Pa àmì yìí mọ́.\n"
             "{routing}"
         ),
-        "french": (
-            "📋 Votre signalement est enregistré sous *{report_id}*. Gardez cette référence.\n"
-            "{routing}"
-        ),
     },
     "routing_sent": {
         "english": "It has been sent to the relevant agency without your phone number.",
         "yoruba": "A ti fi ránṣẹ́ sí ilé-iṣẹ́ tí ó yẹ láì fi nọ́mbà rẹ kún un.",
-        "french": "Il a été transmis au service concerné, sans votre numéro de téléphone.",
     },
     "routing_held": {
         "english": "It is waiting for a dispatcher to review it.",
         "yoruba": "Ó ń dúró de aláṣẹ láti ṣàyẹ̀wò rẹ̀.",
-        "french": "Il attend d'être examiné par un agent.",
     },
     "alerts_offer": {
         "english": (
@@ -267,12 +232,6 @@ UI_STRINGS = {
             "Èmi yóò kàn sí ọ nìkan nígbà tí ó bá kéré tán ènìyàn méjì ọ̀tọ̀ọ̀tọ̀ bá "
             "ròyìn ohun kan náà nítòsí, tàbí tí aláṣẹ bá jẹ́rìí sí i. Kò sí ìránṣẹ́ ojoojúmọ́."
         ),
-        "french": (
-            "🔔 Voulez-vous être averti quand un incident grave est signalé près de "
-            "chez vous ?\n\n"
-            "Je ne vous écrirai que si au moins deux personnes différentes signalent la "
-            "même chose à proximité, ou si un agent le confirme. Aucun message quotidien."
-        ),
     },
     "alerts_on": {
         "english": (
@@ -283,15 +242,10 @@ UI_STRINGS = {
             "🔔 Ó ti parí — èmi yóò kìlọ̀ fún ọ nípa ewu tí a jẹ́rìí sí nítòsí ibí yìí.\n"
             "Fi *STOP* ránṣẹ́ nígbàkigbà láti pa á."
         ),
-        "french": (
-            "🔔 C'est fait — je vous préviendrai des incidents confirmés près d'ici.\n"
-            "Envoyez *STOP* à tout moment pour désactiver."
-        ),
     },
     "alerts_off": {
         "english": "🔕 Area alerts are off. You can still report anything to me at any time.",
         "yoruba": "🔕 Ìkìlọ̀ agbègbè ti parí. O ṣì lè ròyìn ohunkóhun fún mi nígbàkigbà.",
-        "french": "🔕 Les alertes de zone sont désactivées. Vous pouvez toujours me signaler quelque chose à tout moment.",
     },
     "alerts_need_location": {
         "english": (
@@ -301,11 +255,6 @@ UI_STRINGS = {
         "yoruba": (
             "📍 Kí n lè kìlọ̀ fún ọ nípa ewu tí ó wà nítòsí rẹ, mo nílò láti mọ̀ níbi "
             "tí o wà. Pín ibi tí o wà (tẹ 📎 → *Location*) èmi yóò sì tan ìkìlọ̀."
-        ),
-        "french": (
-            "📍 Pour vous avertir des incidents proches, j'ai besoin de savoir à peu "
-            "près où vous êtes. Partagez votre position (📎 → *Position*) et j'activerai "
-            "les alertes."
         ),
     },
     "distress": {
@@ -319,16 +268,10 @@ UI_STRINGS = {
             "Kọ́kọ́ wá ibi àìléwu. Nígbà tí o bá lè ṣe é, sọ ohun tí ó ń ṣẹlẹ̀ fún mi — "
             "àwòrán, ohùn, tàbí ọ̀rọ̀ díẹ̀."
         ),
-        "french": (
-            f"Si vous êtes en danger en ce moment, appelez {EMERGENCY_NUMBERS}.\n\n"
-            "Mettez-vous d'abord en sécurité. Dès que vous le pouvez, dites-moi ce qui "
-            "se passe — une photo, un message vocal, ou quelques mots."
-        ),
     },
     "photo_failed": {
         "english": "I couldn't open that photo. Please send it again, or just tell me what you're seeing.",
         "yoruba": "Mi ò lè ṣí àwòrán yẹn. Jọ̀wọ́ fi í ránṣẹ́ lẹ́ẹ̀kan sí i, tàbí sọ ohun tí o ń rí fún mi.",
-        "french": "Je n'ai pas pu ouvrir cette photo. Renvoyez-la, ou dites-moi simplement ce que vous voyez.",
     },
     "no_voice_input": {
         "english": (
@@ -341,21 +284,14 @@ UI_STRINGS = {
             "أمر مهم. من فضلك اكتب ما يحدث، أو أرسل صورة. يمكنك أيضًا التحويل إلى "
             "الإنجليزية لاستخدام الصوت."
         ),
-        "french": (
-            "Je ne peux pas encore écouter les messages vocaux dans cette langue — je "
-            "risquerais de mal comprendre quelque chose d'important. Écrivez ce qui se "
-            "passe, ou envoyez une photo. Vous pouvez aussi passer en anglais pour la voix."
-        ),
     },
     "voice_failed": {
         "english": "I couldn't hear that clearly. Please try again, or type what is happening.",
         "yoruba": "Mi ò gbọ́ ọ̀rọ̀ yẹn kedere. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i, tàbí kọ ohun tí ó ń ṣẹlẹ̀.",
-        "french": "Je n'ai pas bien entendu. Réessayez, ou écrivez ce qui se passe.",
     },
     "unsupported": {
         "english": "I can read text, listen to voice notes, look at photos, and use your location.",
         "yoruba": "Mo lè ka ìkọ̀wé, gbọ́ ohùn, wo àwòrán, kí n sì lo ibi tí o wà.",
-        "french": "Je peux lire du texte, écouter des messages vocaux, regarder des photos et utiliser votre position.",
     },
     "error": {
         "english": (
@@ -365,10 +301,6 @@ UI_STRINGS = {
         "yoruba": (
             "Nǹkan kan bàjẹ́ ní ọ̀dọ̀ mi. Jọ̀wọ́ fi í ránṣẹ́ lẹ́ẹ̀kan sí i.\n"
             f"Tí ẹnikẹ́ni bá wà nínú ewu, pe {EMERGENCY_NUMBERS} báyìí."
-        ),
-        "french": (
-            "Un problème est survenu de mon côté. Renvoyez votre message.\n"
-            f"Si quelqu'un est en danger, appelez {EMERGENCY_NUMBERS} maintenant."
         ),
     },
 }

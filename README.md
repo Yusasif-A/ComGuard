@@ -33,9 +33,9 @@ Send ComGuard a photo, a voice note, and optionally your location. It:
    from the same area, or direct verification by a dispatcher. One report never
    triggers a public alarm.
 
-Speak or receive replies in **English**, **Yoruba**, **Arabic** and **French**.
-English and Yoruba work by text or voice; Arabic and French are text for now,
-and switch to voice as soon as a speech model for them is pointed at it.
+Speak or receive replies in **English**, **Yoruba** and **Arabic**.
+English and Yoruba work by text or voice; Arabic is text for now, and turns on
+for voice as soon as an Arabic speech model is pointed at it.
 
 **Why WhatsApp:** roughly 95–98% of Nigerian internet users are already on it.
 Nobody has to install anything new.
