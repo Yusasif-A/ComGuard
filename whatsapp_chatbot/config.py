@@ -41,10 +41,28 @@ class Language:
     nllb_url: str = ""               # per-language NLLB endpoint (unused when TRANSLATOR_URL is set)
     needs_translation: bool = False  # True => Gemma answers in English, NLLB renders the reply
     rtl: bool = False                # right-to-left script (Arabic)
+    forced_on: bool = False          # <PREFIX>_ENABLED=true — text-only, no speech endpoints
 
     @property
     def enabled(self) -> bool:
-        return bool(self.stt_url or self.tts_url)
+        return bool(self.stt_url or self.tts_url or self.forced_on)
+
+    @property
+    def can_listen(self) -> bool:
+        """The service can transcribe a voice note in this language."""
+        return bool(self.stt_url) or self.key == "english"
+
+    @property
+    def can_speak(self) -> bool:
+        """The service has a voice that actually pronounces this language.
+
+        Checked before ever synthesising. A TTS model with no adapter for a
+        language does not fail loudly — measured against this deployment, it
+        produces fluent-sounding audio of text the user never wrote. Sending
+        that to somebody in an emergency is worse than sending nothing, so a
+        language without its own voice is text-only by construction.
+        """
+        return bool(self.tts_url)
 
 
 def _lang(key, label, button_id, whisper_code, env_prefix, *,
@@ -68,6 +86,7 @@ def _lang(key, label, button_id, whisper_code, env_prefix, *,
         nllb_url=g("NLLB_URL"),
         needs_translation=needs_translation,
         rtl=rtl,
+        forced_on=g("ENABLED", "").strip().lower() in ("1", "true", "yes"),
     )
 
 
@@ -85,8 +104,16 @@ YORUBA = _lang(
     needs_translation=True,
 )
 
-# Staged for launch — fill ARABIC_STT_API_URL / ARABIC_TTS_BASE_URL in .env and
-# it appears in the language menu automatically. Nothing else needs changing.
+# Arabic is TEXT-ONLY on this deployment. Gemma reads and writes Arabic well,
+# but the Chatterbox TTS service has adapters for en/yo/ha/ig only: asked for
+# "ar" it returns 400, and given Arabic text untagged it emits confident audio
+# of words the user never wrote (verified by transcribing its own output back).
+# So Arabic is switched on with ARABIC_ENABLED=true and no TTS endpoint, which
+# leaves can_speak False and keeps replies in text.
+#
+# When a TTS model that genuinely speaks Arabic is available, set
+# ARABIC_TTS_BASE_URL and voice turns on by itself. Same for ARABIC_STT_API_URL
+# and inbound voice notes.
 ARABIC = _lang(
     "arabic", "العربية", "lang_ar", "ar", "ARABIC",
     default_tts_model="arabic-tts-model",

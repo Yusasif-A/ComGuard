@@ -18,3 +18,6 @@ comguard_chroma_store/
 
 # Local scratch
 *.log
+
+# Local TTS probe output — listen to these, do not commit them.
+tts_samples/

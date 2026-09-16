@@ -36,13 +36,13 @@ def _build_services():
             _tts_services[key] = TextToSpeech()
             continue
 
-        if lang.stt_url:
+        if lang.can_listen and lang.stt_url:
             _stt_services[key] = LocalSpeechToText(
                 api_url=lang.stt_url,
                 fallback_url=lang.stt_fallback_url,
                 language_code=lang.whisper_code,
             )
-        if lang.tts_url:
+        if lang.can_speak:
             _tts_services[key] = LocalTextToSpeech(
                 base_url=lang.tts_url,
                 model=lang.tts_model,
@@ -71,8 +71,14 @@ else:
 
 
 def get_stt_service(language: str = "english"):
-    """STT client for a language, falling back to English if it has none."""
-    return _stt_services.get(language) or _stt_services.get("english")
+    """STT client for a language, or None if it cannot be transcribed.
+
+    Deliberately NOT falling back to the English recogniser. That recogniser is
+    pinned to language="en", so an Arabic voice note run through it comes back
+    as English-sounding nonsense — which would then be filed as the person's
+    report. Returning None lets the caller ask them to type instead.
+    """
+    return _stt_services.get(language)
 
 
 def get_tts_service(language: str = "english"):
@@ -95,7 +101,13 @@ def get_translator():
 
 
 def has_voice_support(language: str) -> bool:
+    """True if a reply can be spoken in this language."""
     return language in _tts_services
+
+
+def has_listening_support(language: str) -> bool:
+    """True if a voice note can be transcribed in this language."""
+    return language in _stt_services
 
 
 def available_languages() -> Dict[str, Language]:

@@ -273,6 +273,18 @@ UI_STRINGS = {
         "english": "I couldn't open that photo. Please send it again, or just tell me what you're seeing.",
         "yoruba": "Mi ò lè ṣí àwòrán yẹn. Jọ̀wọ́ fi í ránṣẹ́ lẹ́ẹ̀kan sí i, tàbí sọ ohun tí o ń rí fún mi.",
     },
+    "no_voice_input": {
+        "english": (
+            "I can't listen to voice notes in this language yet — I'd risk "
+            "mishearing something important. Please type what is happening, or "
+            "send a photo. You can also switch to English for voice."
+        ),
+        "arabic": (
+            "لا أستطيع بعد الاستماع إلى الرسائل الصوتية بهذه اللغة، وقد أسيء فهم "
+            "أمر مهم. من فضلك اكتب ما يحدث، أو أرسل صورة. يمكنك أيضًا التحويل إلى "
+            "الإنجليزية لاستخدام الصوت."
+        ),
+    },
     "voice_failed": {
         "english": "I couldn't hear that clearly. Please try again, or type what is happening.",
         "yoruba": "Mi ò gbọ́ ọ̀rọ̀ yẹn kedere. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i, tàbí kọ ohun tí ó ń ṣẹlẹ̀.",
@@ -490,12 +502,21 @@ def language_buttons(current: str = "english") -> List[dict]:
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
 
+class NoSpeechRecogniser(Exception):
+    """This language has no speech-to-text service configured."""
+
+    def __init__(self, language: str):
+        self.language = language
+        super().__init__(f"No STT service for {language}")
+
+
 async def transcribe(message: dict, language: str) -> str:
-    audio_id = message["audio"]["id"]
-    audio_bytes = await download_media(audio_id)
     service = get_stt_service(language)
     if not service:
-        raise RuntimeError(f"No STT service for {language}")
+        # Raised before the download so we do not pull media we cannot use.
+        raise NoSpeechRecogniser(language)
+    audio_id = message["audio"]["id"]
+    audio_bytes = await download_media(audio_id)
     text = await service.transcribe(audio_bytes)
     logger.info(f"🎤 Transcribed ({language}): {text[:120]}")
     return text
@@ -781,6 +802,10 @@ async def process_message(message: dict, from_number: str):
             reply_with_voice = True
             try:
                 transcript = await transcribe(message, language)
+            except NoSpeechRecogniser:
+                logger.info(f"[bg] No recogniser for {language} — asking for text")
+                await send_message(from_number, ui("no_voice_input", language))
+                return
             except Exception as e:
                 logger.error(f"[bg] Transcription failed: {e}")
                 await send_message(from_number, ui("voice_failed", language))
