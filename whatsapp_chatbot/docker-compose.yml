@@ -1,0 +1,10 @@
+services:
+  whatsapp_chatbot:
+    build:
+      context: ..
+      dockerfile: whatsapp_chatbot/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-5001}:${PORT:-5001}"

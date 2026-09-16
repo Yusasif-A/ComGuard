@@ -1,0 +1,20 @@
+# Secrets — never commit real credentials.
+.env
+.env.*
+!.env.example
+*.env-example
+.env-example
+
+__pycache__/
+*.py[cod]
+.DS_Store
+.vscode/
+.idea/
+.venv/
+venv/
+
+# Vector store is built locally by ingest_corpus.py, not tracked.
+comguard_chroma_store/
+
+# Local scratch
+*.log
