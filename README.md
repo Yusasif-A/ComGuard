@@ -54,16 +54,23 @@ One entry in `config.py` plus environment variables. Arabic is already written;
 to turn it on, fill these in and restart:
 
 ```
-ARABIC_STT_API_URL=...
-ARABIC_TTS_BASE_URL=...
-ARABIC_TTS_MODEL=...
-ARABIC_NLLB_URL=...
+ARABIC_STT_API_URL=https://your-stt-host/ar/v1
+ARABIC_TTS_BASE_URL=https://your-tts-host/ar/v1
+ARABIC_TTS_MODEL=arabic-tts-model
+ARABIC_TTS_VOICE=female
+ARABIC_NLLB_URL=https://your-nllb-host/arabic/v1
 ```
 
 It then appears in the language menu on its own. `app.py`, `services.py` and the
 agent contain no language names at all — they walk the registry. The only thing
 worth adding by hand is a set of onboarding strings in `app.py`'s `UI_STRINGS`;
 without them that language falls back to English text.
+
+The language menu currently offers English and Yoruba — Hausa and Igbo were
+removed. WhatsApp allows at most three reply buttons, and a user is only ever
+offered the languages *other* than their current one, so the menu stays correct
+up to four configured languages. Beyond that the list is truncated and would
+need a WhatsApp list message instead of buttons.
 
 ---
 
