@@ -1,176 +1,90 @@
 # ComGuard
 
-A WhatsApp assistant for reporting community emergencies and scams, and for
-warning neighbours when something is confirmed.
+A WhatsApp AI assistant that lets anyone report a crisis or a scam with a photo,
+a voice note and their location — and warns nearby residents when it is
+confirmed.
 
-Someone sends a photo, a voice note and (optionally) their location. ComGuard
-reads the picture, listens to the description, strips every trace of who sent
-it, tells the person what to do next in their own language, forwards an
-anonymised summary to the right agency, and — only once the report is
-independently corroborated — warns people nearby.
-
-Built on WhatsApp because that is where people already are: roughly 95–98% of
-Nigerian internet users, and over 90% across many African markets. Nobody has to
-install anything.
+**Track:** Safety, Reporting & Protection
 
 ---
 
-## What it does
+## The problem
 
-**Reporting.** Photo, voice note, text, location — in any order, over several
-minutes. The pieces attach to one open report rather than becoming several,
-because three messages from one person must never look like three witnesses.
+African communities face two recurring dangers: sudden physical crises
+(flooding, collapsed roads and bridges, fire, blocked routes, rising tension)
+and everyday scams (fake public notices, fraudulent tax collectors, unlawful
+checkpoints, forged receipts). Information is slow, unreliable, or spreads as
+rumour, and low-literacy users often cannot read a notice or explain what they
+are seeing. There is no simple, trusted way to report a problem, stay protected,
+and alert others quickly.
 
-**Vision.** Gemma reads text off notices verbatim, classifies the hazard or
-scam, judges severity, and flags images that look AI-generated or manipulated.
-One model does all of it; there is no separate detector.
+## The solution
 
-**Grounding.** Municipal tax codes, state gazettes, penal law and SEMA bulletins
-are indexed in a Chroma vector store. When someone asks "is this levy real?",
-the answer comes from the record — and when the record has nothing, the
-assistant says so instead of inventing a statute.
+Send ComGuard a photo, a voice note, and optionally your location. It:
 
-**Reporter protection.** Image metadata (including GPS) is destroyed by
-re-encoding the pixels. Phone numbers become HMAC pseudonyms. Free text is
-scrubbed of numbers, emails and self-identification before it is *stored*, not
-just before it is sent. Coordinates are rounded to roughly a 1km cell before
-anyone outside sees them.
+1. **Analyses** the photo — reads the text on a notice, identifies the hazard,
+   and checks whether the image is AI-generated or altered.
+2. **Protects you** — strips phone numbers and image metadata before anything is
+   stored or shared.
+3. **Tells you what to do** in clear, calm language, grounded in indexed
+   municipal tax codes, state gazettes, penal law and SEMA bulletins.
+4. **Forwards an anonymised summary** to the relevant authority.
+5. **Alerts nearby residents** — but only after two or more independent reports
+   from the same area, or direct verification by a dispatcher. One report never
+   triggers a public alarm.
 
-**Corroboration before alarm.** A community broadcast requires either two
-independent reporters describing the same thing within 3km and 3 hours, or a
-dispatcher's direct confirmation — plus high severity, plus no similar alert in
-the last two hours. One person with a phone can raise a report; one person with
-a phone cannot make the system shout at a neighbourhood.
+Speak or receive replies in **English** and **Yoruba**, by text or voice.
+Arabic is staged and enabled by configuration.
 
-**Languages.** English and Yoruba today, Arabic staged and ready. Gemma reasons
-in English and the reply is translated out, because the translation service
-writes better Yoruba than the model does.
-
----
-
-## Adding a language
-
-One entry in `config.py` plus environment variables. Arabic is already written;
-to turn it on, fill these in and restart:
-
-```
-ARABIC_STT_API_URL=https://your-stt-host/ar/v1
-ARABIC_TTS_BASE_URL=https://your-tts-host/ar/v1
-ARABIC_TTS_MODEL=arabic-tts-model
-ARABIC_TTS_VOICE=female
-ARABIC_NLLB_URL=https://your-nllb-host/arabic/v1
-```
-
-It then appears in the language menu on its own. `app.py`, `services.py` and the
-agent contain no language names at all — they walk the registry. The only thing
-worth adding by hand is a set of onboarding strings in `app.py`'s `UI_STRINGS`;
-without them that language falls back to English text.
-
-The language menu currently offers English and Yoruba — Hausa and Igbo were
-removed. WhatsApp allows at most three reply buttons, and a user is only ever
-offered the languages *other* than their current one, so the menu stays correct
-up to four configured languages. Beyond that the list is truncated and would
-need a WhatsApp list message instead of buttons.
+**Why WhatsApp:** roughly 95–98% of Nigerian internet users are already on it.
+Nobody has to install anything new.
 
 ---
 
-## Running it
+## Built with
+
+- **Gemma Vision** — OCR, hazard classification, real-vs-synthetic image checks
+- **ChromaDB + RAG** — grounding in official municipal and emergency records
+- **Whisper / local TTS** — speech in and out, per language
+- **FastAPI** — async webhooks, metadata stripping, anonymised routing
+- **MongoDB** — reports, corroboration, conversation memory
+
+---
+
+## Run it
 
 ```bash
 cd whatsapp_chatbot
-cp .env.example .env          # then fill it in
+cp .env.example .env          # fill in your keys
 pip install -r requirements.txt
 
-# Index the official documents (PDF/TXT/MD) the assistant cites
-python ingest_corpus.py ./corpus
-
+python ingest_corpus.py ./corpus     # index official documents
 uvicorn app:app --host 0.0.0.0 --port 5001
 ```
 
 Or with Docker:
 
 ```bash
-cd whatsapp_chatbot
-docker compose up --build
+cd whatsapp_chatbot && docker compose up --build
 ```
 
-Point the Meta webhook at `https://your-host/whatsapp` and use the same
-`WHATSAPP_VERIFY_TOKEN` on both sides. Set `WHATSAPP_APP_SECRET` too — without
-it, webhook signatures are not checked and anyone who learns the URL can post
-fake reports.
+Point the Meta webhook at `https://your-host/whatsapp`.
 
-### Two settings to get right before going live
-
-`REPORT_SALT` — a long random string. Reporter pseudonyms are derived from it.
-Without one the service still runs, but the pseudonyms become guessable by
-anyone who can read the database.
+Generate a `REPORT_SALT` before going live — reporter anonymity depends on it:
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-`CORROBORATION_THRESHOLD` — leave it at 2. Setting it to 1 turns the service
-from a safety line into a rumour amplifier.
-
 ---
 
-## Dispatcher endpoints
+## Dispatcher view
 
-Behind HTTP basic auth (`DASHBOARD_USER` / `DASHBOARD_PASSWORD`). With no
-password configured they refuse to serve rather than defaulting to open.
+Read-only endpoints behind HTTP basic auth:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /reports/data` | Reports, headline stats, recent alerts |
-| `GET /reports/export.csv` | Full report log as CSV |
-| `POST /reports/{id}/verify` | Confirm a report — may trigger a broadcast |
+| `GET /reports/data` | Reports, stats, recent alerts |
+| `GET /reports/export.csv` | Full log as CSV |
+| `POST /reports/{id}/verify` | Confirm a report |
 | `POST /reports/{id}/dismiss` | Reject a report |
-| `GET /health` | Liveness |
-
-There is also a CLI:
-
-```bash
-python admin.py reports --status submitted
-python admin.py show CG-7K3M9Q
-python admin.py stats
-python admin.py forget <phone-number>     # erase a person's settings + messages
-```
-
----
-
-## Layout
-
-| File | Responsibility |
-|---|---|
-| `app.py` | WhatsApp webhook, message routing, report pipeline, dashboard |
-| `config.py` | Language registry and all tunable thresholds |
-| `vision.py` | Gemma image analysis + text classification |
-| `anonymiser.py` | EXIF destruction, pseudonyms, text scrubbing |
-| `reports.py` | Report store, geofencing, corroboration |
-| `alerts.py` | Authority dispatch, community broadcast gating |
-| `store.py` | User settings, alert opt-in, conversation log |
-| `unified_agent.py` | The conversational agent and its one tool |
-| `comguard_prompt.py` | System prompts (text/voice × English/other) |
-| `retriever.py` | Ensemble retrieval over the official corpus |
-| `ingest_corpus.py` | Builds that corpus from PDFs |
-| `services.py` | STT/TTS/translation, wired from the registry |
-
----
-
-## Known gaps
-
-- **Translations need a native speaker.** The Yoruba onboarding strings in
-  `app.py`, the refusal messages in `unified_agent.py`, and the glossary seed in
-  `nllb_translator.py` are best-effort and marked with ⚠️ in the source. A
-  confidently wrong safety instruction is worse than an English one. Drop a
-  reviewed `glossary.json` next to `nllb_translator.py` to extend the glossary
-  without touching code.
-- **Reports without a location cannot corroborate or be corroborated.** This is
-  deliberate — there is no way to tell whether they describe the same incident
-  or one 200km away — but it does mean a location-less report will never trigger
-  an alert on its own.
-- **Authority webhooks are unconfigured by default.** Reports are stored and
-  visible on the dashboard, just not pushed anywhere until
-  `AUTHORITY_WEBHOOK_URL` (or a per-category override) is set.
-- **The corpus ships empty.** Until `ingest_corpus.py` has been run, the
-  assistant cannot cite official sources and will say so rather than guess.
