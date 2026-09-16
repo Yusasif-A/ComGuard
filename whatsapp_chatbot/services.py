@@ -1,69 +1,102 @@
-import os
-import sys
+"""
+Speech and translation services, built from the language registry.
+
+Nothing here knows the name of a language. Services are constructed by walking
+config.LANGUAGES, so turning Arabic on is an .env change and a restart — no code
+in this file, app.py or the agent has to learn about it.
+"""
+
 import logging
+from typing import Dict
 
-# Add AI_engine to path for regional services
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "AI_engine")))
-
-from speech_to_text import SpeechToText
-from text_to_speech import TextToSpeech
+from config import LANGUAGES, TRANSLATOR_URL, Language, get_language
 from local_stt import LocalSpeechToText
 from local_tts import LocalTextToSpeech
-from nllb_translator import NLLBTranslator, HelpMumTranslator
-from config import (
-    HAUSA_STT_API_URL, HAUSA_STT_FALLBACK_URL, HAUSA_TTS_BASE_URL, HAUSA_TTS_FALLBACK_URL, HAUSA_TTS_MODEL, HAUSA_NLLB_URL,
-    IGBO_STT_API_URL, IGBO_STT_FALLBACK_URL, IGBO_TTS_BASE_URL, IGBO_TTS_FALLBACK_URL, IGBO_TTS_MODEL, IGBO_NLLB_URL,
-    YORUBA_STT_API_URL, YORUBA_STT_FALLBACK_URL, YORUBA_TTS_BASE_URL, YORUBA_TTS_FALLBACK_URL, YORUBA_TTS_MODEL, YORUBA_NLLB_URL,
-    TRANSLATOR_URL
-)
+from nllb_translator import NLLBTranslator, PivotTranslator
+from speech_to_text import SpeechToText
+from text_to_speech import TextToSpeech
 
 logger = logging.getLogger(__name__)
 
-# Initialize English services
-english_stt = SpeechToText()
-english_tts = TextToSpeech()
+_stt_services: Dict[str, object] = {}
+_tts_services: Dict[str, object] = {}
 
-# Initialize Regional services
-hausa_stt = LocalSpeechToText(api_url=HAUSA_STT_API_URL, fallback_url=HAUSA_STT_FALLBACK_URL)
-hausa_tts = LocalTextToSpeech(base_url=HAUSA_TTS_BASE_URL, model=HAUSA_TTS_MODEL, fallback_url=HAUSA_TTS_FALLBACK_URL)
 
-igbo_stt = LocalSpeechToText(api_url=IGBO_STT_API_URL, fallback_url=IGBO_STT_FALLBACK_URL)
-igbo_tts = LocalTextToSpeech(base_url=IGBO_TTS_BASE_URL, model=IGBO_TTS_MODEL, fallback_url=IGBO_TTS_FALLBACK_URL)
+def _build_services():
+    """Instantiate one STT and one TTS client per configured language.
 
-yoruba_stt = LocalSpeechToText(api_url=YORUBA_STT_API_URL, fallback_url=YORUBA_STT_FALLBACK_URL)
-yoruba_tts = LocalTextToSpeech(base_url=YORUBA_TTS_BASE_URL, model=YORUBA_TTS_MODEL, fallback_url=YORUBA_TTS_FALLBACK_URL)
+    English uses the dedicated OpenAI-compatible clients; every other language
+    goes through the generic local clients, which take their endpoints from the
+    registry entry. A language whose endpoints are missing simply gets no client
+    and falls back to English at call time.
+    """
+    for key, lang in LANGUAGES.items():
+        if key == "english":
+            _stt_services[key] = SpeechToText()
+            _tts_services[key] = TextToSpeech()
+            continue
 
-# Use HelpMum unified translator if URL is configured, otherwise fall back to per-language NLLB
-if TRANSLATOR_URL:
-    translator = HelpMumTranslator(base_url=TRANSLATOR_URL)
-    logger.info(f"✅ Using HelpMumTranslator: {TRANSLATOR_URL}")
-else:
-    translator = NLLBTranslator(
-        hausa_url=HAUSA_NLLB_URL,
-        igbo_url=IGBO_NLLB_URL,
-        yoruba_url=YORUBA_NLLB_URL
+        if lang.stt_url:
+            _stt_services[key] = LocalSpeechToText(
+                api_url=lang.stt_url,
+                fallback_url=lang.stt_fallback_url,
+                language_code=lang.whisper_code,
+            )
+        if lang.tts_url:
+            _tts_services[key] = LocalTextToSpeech(
+                base_url=lang.tts_url,
+                model=lang.tts_model,
+                fallback_url=lang.tts_fallback_url,
+            )
+
+    logger.info(
+        "🗣️ Speech services ready — STT: %s | TTS: %s",
+        sorted(_stt_services), sorted(_tts_services),
     )
+
+
+_build_services()
+
+
+# The unified translator is preferred when TRANSLATOR_URL is set; otherwise each
+# language falls back to its own NLLB endpoint from the registry.
+if TRANSLATOR_URL:
+    _translator = PivotTranslator(base_url=TRANSLATOR_URL)
+    logger.info(f"✅ Using PivotTranslator: {TRANSLATOR_URL}")
+else:
+    _translator = NLLBTranslator({
+        key: lang.nllb_url for key, lang in LANGUAGES.items() if lang.nllb_url
+    })
     logger.info("⚠️ TRANSLATOR_URL not set — using per-language NLLB endpoints")
 
+
 def get_stt_service(language: str = "english"):
-    if language == "hausa":
-        return hausa_stt
-    if language == "igbo":
-        return igbo_stt
-    if language == "yoruba":
-        return yoruba_stt
-    # Default is English
-    return english_stt
+    """STT client for a language, falling back to English if it has none."""
+    return _stt_services.get(language) or _stt_services.get("english")
+
 
 def get_tts_service(language: str = "english"):
-    if language == "hausa":
-        return hausa_tts
-    if language == "igbo":
-        return igbo_tts
-    if language == "yoruba":
-        return yoruba_tts
-    # Default is English
-    return english_tts
+    """TTS client for a language, or None — callers must handle a missing voice.
+
+    Returning None rather than the English voice is deliberate: reading a Yoruba
+    reply aloud with an English voice produces something nobody can understand,
+    and silently sending it would look like a working feature. The caller sends
+    text instead.
+    """
+    return _tts_services.get(language)
+
+
+def get_voice(language: str) -> str:
+    return get_language(language).tts_voice
+
 
 def get_translator():
-    return translator
+    return _translator
+
+
+def has_voice_support(language: str) -> bool:
+    return language in _tts_services
+
+
+def available_languages() -> Dict[str, Language]:
+    return dict(LANGUAGES)

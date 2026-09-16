@@ -1,469 +1,285 @@
-from openai import OpenAI
+"""
+Translation between English and the languages in the registry.
+
+ComGuard reasons in English and speaks to people in their own language, so every
+reply crosses this module. Two implementations with the same interface:
+
+  PivotTranslator  one endpoint that handles every pair (set TRANSLATOR_URL)
+  NLLBTranslator   one endpoint per language, from the registry's nllb_url
+
+Both expose ``to_english(text, language)`` and ``from_english(text, language)``,
+so callers never branch on which one is in use or which language is involved.
+
+A translation mistake here is not cosmetic. "Do not go near the water" becoming
+"go near the water" is a safety failure, so the safest behaviour on error is to
+return the English text unchanged rather than to guess — English is at least
+readable to many users and is never dangerously wrong.
+"""
+
+import json
 import logging
-import re
 import os
+import re
+import unicodedata
+from pathlib import Path
+from typing import Dict
+
 import requests
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# Yoruba number words for list markers (1–20)
+
+# ── Yoruba numerals for spoken output ────────────────────────────────────────
+
 _YORUBA_NUMBERS = {
-    '1': 'ọkan', '2': 'èjì', '3': 'ẹta', '4': 'ẹrin', '5': 'àrún',
-    '6': 'ẹfà', '7': 'èjẹ̀', '8': 'ẹjọ', '9': 'ẹsàn', '10': 'ẹwà',
-    '11': 'ọkanlá', '12': 'ejìlá', '13': 'ẹtalá', '14': 'ẹrinlá',
-    '15': 'ẹẹdọgún', '16': 'ẹrìndínlógún', '17': 'ẹtàdínlógún',
-    '18': 'ejìdínlógún', '19': 'ọkàndínlógún', '20': 'ogún',
+    "1": "ọkan", "2": "èjì", "3": "ẹta", "4": "ẹrin", "5": "àrún",
+    "6": "ẹfà", "7": "èjẹ̀", "8": "ẹjọ", "9": "ẹsàn", "10": "ẹwà",
+    "11": "ọkanlá", "12": "ejìlá", "13": "ẹtalá", "14": "ẹrinlá",
+    "15": "ẹẹdọgún", "16": "ẹrìndínlógún", "17": "ẹtàdínlógún",
+    "18": "ejìdínlógún", "19": "ọkàndínlógún", "20": "ogún",
 }
 
 
 def yoruba_numbers_to_words(text: str) -> str:
-    """Replace numbered list markers with Yoruba words — use this before TTS only.
-    e.g. '1. Mọ ìsanwó' → 'ọkan. Mọ ìsanwó', '2.Gba' → 'èjì. Gba'
-    Matches 1-2 digit number + dot not followed by another digit (avoids decimals).
+    """Turn "1." list markers into Yoruba words. For TTS input only.
+
+    A TTS voice reads a bare "1." as noise or skips it, so a numbered list of
+    safety steps loses its ordering exactly when ordering matters most.
     """
     def _replace(m):
-        return _YORUBA_NUMBERS.get(m.group(1), m.group(1)) + '. '
-    return re.sub(r'(\d{1,2})\.(?!\d)\s*', _replace, text)
+        return _YORUBA_NUMBERS.get(m.group(1), m.group(1)) + ". "
+    return re.sub(r"(\d{1,2})\.(?!\d)\s*", _replace, text)
 
 
-class NLLBTranslator:
-    """Translation service using NLLB model for Hausa, Igbo, Yoruba ↔ English"""
-    
-    def __init__(self, hausa_url=None, igbo_url=None, yoruba_url=None):
-        """Initialize NLLB clients for Hausa, Igbo, and Yoruba"""
-        
-        # Hausa NLLB client
-        self.hausa_url = hausa_url or os.getenv("HAUSA_NLLB_URL", "")
-        if not self.hausa_url.endswith('/v1'):
-            self.hausa_url = self.hausa_url.rstrip('/') + '/v1'
-        self.hausa_client = OpenAI(
-            base_url=self.hausa_url, 
-            api_key="fake_key"  # API key is ignored
+def numbers_to_words(text: str, language: str) -> str:
+    """Language-aware numeral handling for spoken output."""
+    if language == "yoruba":
+        return yoruba_numbers_to_words(text)
+    return text
+
+
+# ── Glossary ─────────────────────────────────────────────────────────────────
+#
+# Terms a general-purpose translation model reliably gets wrong in this domain,
+# and which people must understand exactly. Substituted into the English text
+# before translation so the model carries the right word through.
+#
+# The built-in seed is deliberately tiny and covers only everyday words. The real
+# glossary belongs in glossary.json next to this file, where a native speaker can
+# edit it without touching code:
+#
+#   {"yoruba": {"flood": "ìkún omi", "higher ground": "orí òkè"}}
+#
+# ⚠️ Every entry here and in that file must be reviewed by a native speaker
+# before the service is used in production. A confidently wrong safety word is
+# worse than an untranslated English one.
+
+_SEED_GLOSSARY: Dict[str, Dict[str, str]] = {
+    "yoruba": {
+        "flood": "ìkún omi",
+        "fire": "iná",
+        "police": "ọlọ́pàá",
+        "hospital": "ilé ìwòsàn",
+        "danger": "ewu",
+        "money": "owó",
+        "receipt": "ìwé ẹ̀rí owó",
+        "bridge": "afárá",
+        "road": "ọ̀nà",
+    },
+}
+
+_GLOSSARY_PATH = Path(__file__).with_name("glossary.json")
+
+
+def _load_glossary() -> Dict[str, Dict[str, str]]:
+    glossary = {lang: dict(terms) for lang, terms in _SEED_GLOSSARY.items()}
+    if not _GLOSSARY_PATH.exists():
+        return glossary
+    try:
+        loaded = json.loads(_GLOSSARY_PATH.read_text(encoding="utf-8"))
+        for lang, terms in (loaded or {}).items():
+            if isinstance(terms, dict):
+                glossary.setdefault(lang, {}).update(
+                    {str(k).lower(): str(v) for k, v in terms.items()}
+                )
+        logger.info(f"📖 Glossary loaded for: {sorted(glossary)}")
+    except Exception as e:
+        logger.error(f"❌ Could not read glossary.json ({e}) — using the built-in seed only")
+    return glossary
+
+
+GLOSSARY = _load_glossary()
+
+
+def _apply_glossary(text: str, language: str) -> str:
+    """Swap known terms into the target language before translating.
+
+    Longest terms first, so "higher ground" is matched before "ground".
+    """
+    terms = GLOSSARY.get(language, {})
+    for english in sorted(terms, key=len, reverse=True):
+        text = re.sub(
+            r"\b" + re.escape(english) + r"\b",
+            terms[english],
+            text,
+            flags=re.IGNORECASE,
         )
-        self.hausa_model = "nllb-hausa"
-        
-        # Igbo NLLB client
-        self.igbo_url = igbo_url or os.getenv("IGBO_NLLB_URL", "")
-        if not self.igbo_url.endswith('/v1'):
-            self.igbo_url = self.igbo_url.rstrip('/') + '/v1'
-        self.igbo_client = OpenAI(
-            base_url=self.igbo_url,
-            api_key="fake_key"
-        )
-        self.igbo_model = "nllb-igbo"
-        
-        # Yoruba NLLB client
-        self.yoruba_url = yoruba_url or os.getenv("YORUBA_NLLB_URL", "")
-        if not self.yoruba_url.endswith('/v1'):
-            self.yoruba_url = self.yoruba_url.rstrip('/') + '/v1'
-        self.yoruba_client = OpenAI(
-            base_url=self.yoruba_url,
-            api_key="fake_key"
-        )
-        self.yoruba_model = "nllb-yoruba"
-        
-        logger.info(f"✅ NLLB Translator initialized")
-        logger.info(f"   Hausa: {self.hausa_url} (model: {self.hausa_model})")
-        logger.info(f"   Igbo: {self.igbo_url} (model: {self.igbo_model})")
-        logger.info(f"   Yoruba: {self.yoruba_url} (model: {self.yoruba_model})")
-    
-    def hausa_to_english(self, hausa_text: str) -> str:
-        if not hausa_text or not hausa_text.strip():
-            logger.warning("⚠️ Empty Hausa text provided")
-            return ""
-        try:
-            logger.info(f"🔄 Translating Hausa→English: '{hausa_text[:100]}...'")
-            response = self.hausa_client.chat.completions.create(
-                model=self.hausa_model,
-                messages=[{"role": "user", "content": hausa_text}],
-                temperature=0.1,
-                max_tokens=4096,
-                extra_body={"direction": "hausa_to_english", "max_tokens": 4096}
-            )
-            english_text = response.choices[0].message.content.strip()
-            logger.info(f"✅ Translation complete: '{english_text[:100]}...'")
-            return english_text
-        except Exception as e:
-            logger.error(f"❌ Hausa→English translation failed: {e}")
-            raise Exception(f"Translation failed: {str(e)}")
-    
-    def english_to_hausa(self, english_text: str) -> str:
-        if not english_text or not english_text.strip():
-            logger.warning("⚠️ Empty English text provided")
-            return ""
-        try:
-            english_text = self._preprocess_english_for_translation(english_text, "ha")
-            logger.info(f"🔄 Translating English→Hausa: '{english_text[:100]}...'")
-            response = self.hausa_client.chat.completions.create(
-                model=self.hausa_model,
-                messages=[{"role": "user", "content": english_text}],
-                temperature=0.1,
-                max_tokens=4096,
-                extra_body={"direction": "english_to_hausa", "max_tokens": 4096}
-            )
-            hausa_text = self._postprocess_common(response.choices[0].message.content.strip())
-            logger.info(f"✅ Translation complete: '{hausa_text[:100]}...'")
-            return hausa_text
-        except Exception as e:
-            logger.error(f"❌ English→Hausa translation failed: {e}")
-            raise Exception(f"Translation failed: {str(e)}")
+    return text
 
-    def igbo_to_english(self, igbo_text: str) -> str:
-        if not igbo_text or not igbo_text.strip():
-            logger.warning("⚠️ Empty Igbo text provided")
-            return ""
-        try:
-            logger.info(f"🔄 Translating Igbo→English: '{igbo_text[:100]}...'")
-            response = self.igbo_client.chat.completions.create(
-                model=self.igbo_model,
-                messages=[{"role": "user", "content": igbo_text}],
-                temperature=0.1,
-                max_tokens=4096,
-                extra_body={"direction": "igbo_to_english", "max_tokens": 4096}
-            )
-            english_text = response.choices[0].message.content.strip()
-            logger.info(f"✅ Translation complete: '{english_text[:100]}...'")
-            return english_text
-        except Exception as e:
-            logger.error(f"❌ Igbo→English translation failed: {e}")
-            raise Exception(f"Translation failed: {str(e)}")
-    
-    def english_to_igbo(self, english_text: str) -> str:
-        if not english_text or not english_text.strip():
-            logger.warning("⚠️ Empty English text provided")
-            return ""
-        try:
-            english_text = self._preprocess_english_for_translation(english_text, "ig")
-            logger.info(f"🔄 Translating English→Igbo: '{english_text[:100]}...'")
-            response = self.igbo_client.chat.completions.create(
-                model=self.igbo_model,
-                messages=[{"role": "user", "content": english_text}],
-                temperature=0.1,
-                max_tokens=4096,
-                extra_body={"direction": "english_to_igbo", "max_tokens": 4096}
-            )
-            igbo_text = self._postprocess_common(response.choices[0].message.content.strip())
-            logger.info(f"✅ Translation complete: '{igbo_text[:100]}...'")
-            return igbo_text
-        except Exception as e:
-            logger.error(f"❌ English→Igbo translation failed: {e}")
-            raise Exception(f"Translation failed: {str(e)}")
 
-    @staticmethod
-    def _postprocess_common(text: str) -> str:
-        """Format NLLB output for all languages:
-        - Strip <unk> tokens (NLLB cannot translate emojis/special chars)
-        - Remove mailto: artifacts injected by NLLB
-        - Add blank line before each numbered list item (1. 2. 3. ...)
-        - Collapse excessive blank lines
-        """
-        # Remove <unk> tokens (with any trailing space/punctuation glued to them)
-        text = re.sub(r'<unk>\s*', '', text)
-        # Remove mailto:... artifacts
-        text = re.sub(r'\s*mailto:\S+', '', text)
-        # Add double newline before numbered list items (not decimal numbers)
-        text = re.sub(r'(?<!\n)\s*(\d{1,2})\.(?!\d)\s+', r'\n\n\1. ', text)
-        # Collapse 3+ newlines to 2
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        return text.strip()
+# ── Shared text handling ─────────────────────────────────────────────────────
 
-    # ── Food name maps: English → native name per language ──────────────────
-    _FOOD_MAP_YORUBA = {
-        "stew": "obẹ", "pepper stew": "obẹ ata", "tomato stew": "obẹ tomati",
-        "soup": "obẹ",
-        "yam": "isu", "yams": "isu",
-        "pounded yam": "iyán", "pounded yam flour": "iyán",
-        "cassava": "paki", "cassava flour": "paki",
-        "garri": "gàárì", "eba": "eba",
-        "fufu": "ìyán", "semovita": "semovita",
-        "beans": "ẹ̀wà", "cowpea": "ẹ̀wà", "black eyed peas": "ẹ̀wà",
-        "groundnut": "ẹ̀pà", "peanut": "ẹ̀pà", "peanuts": "ẹ̀pà", "groundnuts": "ẹ̀pà",
-        "palm oil": "epo pupa",
-        "palm kernel": "epo igi ope",
-        "plantain": "ogede agbado", "ripe plantain": "ogede",
-        "unripe plantain": "ogede ọmọ",
-        "corn": "agbado", "maize": "agbado",
-        "sorghum": "oka baba",
-        "millet": "oka",
-        "rice": "iresi",
-        "egusi": "egusi", "melon seeds": "egusi",
-        "crayfish": "ẹja kẹtẹ", "dried crayfish": "ẹja kẹtẹ",
-        "stockfish": "panla", "dried fish": "ẹja gbígbẹ",
-        "catfish": "ẹja aro",
-        "tilapia": "ẹja",
-        "beef": "ẹran malu", "meat": "ẹran",
-        "chicken": "adie", "poultry": "adie",
-        "egg": "ẹyin", "eggs": "ẹyin",
-        "milk": "wara", "breast milk": "ọmu",
-        "pap": "ògì", "akamu": "ògì",
-        "akara": "akara",
-        "moi moi": "mọ̀ínmọ̀ín",
-        "ewedu": "ewedu",
-        "gbegiri": "gbẹgiri",
-        "ogi": "ògì",
-        "tuwo": "tuwo",
-        "okra": "ila", "okro": "ila",
-        "bitter leaf": "ewuro",
-        "waterleaf": "gbure",
-        "ugu": "ugu", "pumpkin leaves": "ugu",
-        "spinach": "efo tete",
-        "tomato": "tomati", "tomatoes": "tomati",
-        "pepper": "ata",
-        "onion": "alubosa", "onions": "alubosa",
-        "garlic": "alubosa ajo",
-        "ginger": "ata ile",
-        "locust beans": "iru",
-        "ogiri": "ogiri",
-        "orange": "osan", "oranges": "osan",
-        "banana": "ogede", "bananas": "ogede",
-        "pawpaw": "ibepe", "papaya": "ibepe",
-        "mango": "mangoro",
-        "avocado": "pia",
-        "soybeans": "awara", "soya": "awara",
-        "ede": "ẹsu", "cocoyam": "ẹsu",
-        "sweet potato": "anamo",
-        "irish potato": "iresi isu",
-        "fish": "eja",
-    }
+def _postprocess(text: str) -> str:
+    """Tidy raw translation output.
 
-    _FOOD_MAP_HAUSA = {
-        "yam": "doya", "yams": "doya",
-        "pounded yam": "tuwo doya",
-        "cassava": "rogo",
-        "garri": "gari",
-        "fufu": "tuwo",
-        "tuwo shinkafa": "tuwo shinkafa",
-        "tuwo masara": "tuwo masara",
-        "beans": "wake", "cowpea": "wake", "black eyed peas": "wake",
-        "groundnut": "gyada", "peanut": "gyada", "peanuts": "gyada", "groundnuts": "gyada",
-        "groundnut oil": "man gyada",
-        "palm oil": "man tafasasshe",
-        "plantain": "ayaba",
-        "corn": "masara", "maize": "masara",
-        "sorghum": "dawa",
-        "millet": "gero",
-        "rice": "shinkafa",
-        "egusi": "egushi",
-        "crayfish": "kifi kanana", "dried crayfish": "kifi mai bushewa",
-        "stockfish": "kifi mai bushe",
-        "dried fish": "kifi mai bushewa",
-        "catfish": "kifi karo",
-        "beef": "naman sa", "meat": "nama",
-        "chicken": "kaza", "poultry": "kaza",
-        "egg": "kwai", "eggs": "kwai",
-        "milk": "madara", "breast milk": "nonon uwa",
-        "pap": "kunu", "akamu": "kunu",
-        "fura": "fura",
-        "fura da nono": "fura da nono",
-        "okra": "kubewa", "okro": "kubewa",
-        "bitter leaf": "shuwaka",
-        "spinach": "alayyahu",
-        "tomato": "tumatir", "tomatoes": "tumatir",
-        "pepper": "barkono",
-        "onion": "albasa", "onions": "albasa",
-        "garlic": "tafarnuwa",
-        "ginger": "citta",
-        "locust beans": "dawadawa",
-        "orange": "lemu", "oranges": "lemu",
-        "banana": "ayaba", "bananas": "ayaba",
-        "pawpaw": "gwanda", "papaya": "gwanda",
-        "mango": "mangwaro",
-        "sweet potato": "dankali",
-        "irish potato": "dankalin turawa",
-        "soybeans": "wake soya",
-        "fish": "kifi",
-        "cocoyam": "gwaza",
-        "watermelon": "kankana",
-    }
+    <unk> appears wherever the model met an emoji or symbol it has no token for;
+    left in, it reads aloud as nonsense. The mailto: artefact is a known NLLB
+    quirk on text containing an address.
+    """
+    text = re.sub(r"<unk>\s*", "", text)
+    text = re.sub(r"\s*mailto:\S+", "", text)
+    text = re.sub(r"(?<!\n)\s*(\d{1,2})\.(?!\d)\s+", r"\n\n\1. ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
-    _FOOD_MAP_IGBO = {
-        "yam": "ji", "yams": "ji",
-        "pounded yam": "ji ikwe",
-        "cassava": "akpu", "cassava fufu": "akpu",
-        "garri": "garri",
-        "fufu": "akpu",
-        "beans": "agwa", "cowpea": "agwa", "black eyed peas": "agwa",
-        "groundnut": "ahụekere", "peanut": "ahụekere", "peanuts": "ahụekere",
-        "palm oil": "mmanu nri",
-        "palm kernel": "ọkpa",
-        "plantain": "ogede",
-        "corn": "ọka", "maize": "ọka",
-        "sorghum": "ọka ocha",
-        "millet": "ọka nri",
-        "rice": "osikapa",
-        "egusi": "egusi",
-        "crayfish": "ose oji", "dried crayfish": "ose oji",
-        "stockfish": "okporoko",
-        "dried fish": "azụ ọkụ",
-        "catfish": "azụ nkota",
-        "beef": "anụ efi", "meat": "anụ",
-        "chicken": "okuko", "poultry": "okuko",
-        "egg": "akwa okuko", "eggs": "akwa okuko",
-        "milk": "mmiri ara", "breast milk": "ara",
-        "pap": "akamu",
-        "oha soup": "oha",
-        "nsala soup": "nsala",
-        "abacha": "abacha",
-        "ukwa": "ukwa",
-        "ugba": "ugba",
-        "okra": "okwuru", "okro": "okwuru",
-        "bitter leaf": "onugbu",
-        "waterleaf": "mgbolodi",
-        "ugu": "ugu", "pumpkin leaves": "ugu",
-        "spinach": "ede nri",
-        "tomato": "tomato", "tomatoes": "tomato",
-        "pepper": "ose", "pepper soup": "ofe ose",
-        "onion": "yabasị", "onions": "yabasị",
-        "garlic": "tafarnuwa",
-        "ginger": "jinja",
-        "locust beans": "ogiri",
-        "orange": "ọrọba", "oranges": "ọrọba",
-        "banana": "unere", "bananas": "unere",
-        "pawpaw": "ọ̀gbụ̀gbụ̀", "papaya": "ọ̀gbụ̀gbụ̀",
-        "mango": "mangoro",
-        "sweet potato": "anụ ji",
-        "irish potato": "ji oyibo",
-        "soybeans": "agwa soya",
-        "fish": "azụ",
-        "cocoyam": "ede",
-        "breadfruit": "ukwa",
-    }
 
-    @classmethod
-    def _preprocess_english_for_translation(cls, text: str, lang: str) -> str:
-        """Replace English food names with correct native equivalents before NLLB translation.
-        This prevents NLLB from mistranslating common Nigerian food names.
-        Uses word-boundary matching and is case-insensitive.
-        """
-        food_map = {
-            "yo": cls._FOOD_MAP_YORUBA,
-            "ha": cls._FOOD_MAP_HAUSA,
-            "ig": cls._FOOD_MAP_IGBO,
-        }.get(lang, {})
+def _strip_diacritics(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
 
-        for english, native in sorted(food_map.items(), key=lambda x: -len(x[0])):
-            text = re.sub(
-                r'\b' + re.escape(english) + r'\b',
-                native,
-                text,
-                flags=re.IGNORECASE
-            )
+
+# Speech-to-text output arrives without tone marks and with spellings that vary
+# by speaker, so these are matched on the stripped form. They are short function
+# words the translator mishandles in isolation, which matters because a one-word
+# reply is often the whole message ("ìkún omi" — "flood").
+_INBOUND_FIXUPS = {
+    "yoruba": [
+        (r"\bbawoni\s+mose\b", "how do i"),
+        (r"\bbawoni\b", "how can i"),
+        (r"\bbeeni\b", "yes"),
+        (r"\brara\b", "no"),
+        (r"\bengbe\b", "help"),
+        (r"\bgba mi\b", "help me"),
+    ],
+}
+
+
+def _preprocess_inbound(text: str, language: str) -> str:
+    fixups = _INBOUND_FIXUPS.get(language)
+    if not fixups:
         return text
+    normalised = _strip_diacritics(text)
+    for pattern, replacement in fixups:
+        normalised = re.sub(pattern, replacement, normalised, flags=re.IGNORECASE)
+    return normalised
 
-    @staticmethod
-    def _preprocess_yoruba_query(text: str) -> str:
-        """Replace Yoruba colloquial phrases that NLLB struggles with.
-        Strips diacritics first so STT output like 'bàwọní' still matches.
+
+class _BaseTranslator:
+    """Shared entry points. Subclasses implement _call()."""
+
+    def _call(self, text: str, src: str, tgt: str) -> str:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def to_english(self, text: str, language: str) -> str:
+        """Translate a user's message into English. Returns "" on empty input."""
+        if not text or not text.strip() or language == "english":
+            return text or ""
+        try:
+            prepared = _preprocess_inbound(text, language)
+            return self._call(prepared, _iso(language), "en").strip()
+        except Exception as e:
+            logger.error(f"❌ {language}→English translation failed: {e}")
+            # The raw text still carries meaning to a multilingual model, so it
+            # is more useful passed through than replaced with an error string.
+            return text
+
+    def from_english(self, text: str, language: str) -> str:
+        """Translate a reply out of English. Returns the English on failure.
+
+        Falling back to English is the safe failure: the person may struggle
+        with it, but they are never given a mistranslated safety instruction.
         """
-        import re
-        import unicodedata
-        # Strip diacritics (tone marks) so STT variants like bàwọní → bawoni
-        normalized = unicodedata.normalize('NFD', text)
-        normalized = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
-        # "bawoni mosele" → "how do i" (more specific, must come first)
-        normalized = re.sub(r'\bbawoni\s+mosele\b', 'how do i', normalized, flags=re.IGNORECASE)
-        # "bawoni" alone → "how can i"
-        normalized = re.sub(r'\bbawoni\b', 'how can i', normalized, flags=re.IGNORECASE)
-        # "beeni" → "yes"
-        normalized = re.sub(r'\bbeeni\b', 'yes', normalized, flags=re.IGNORECASE)
-        return normalized
-
-    def yoruba_to_english(self, yoruba_text: str) -> str:
-        if not yoruba_text or not yoruba_text.strip():
-            logger.warning("⚠️ Empty Yoruba text provided")
-            return ""
+        if not text or not text.strip() or language == "english":
+            return text or ""
         try:
-            yoruba_text = self._preprocess_yoruba_query(yoruba_text)
-            logger.info(f"🔄 Translating Yoruba→English: '{yoruba_text[:100]}...'")
-            response = self.yoruba_client.chat.completions.create(
-                model=self.yoruba_model,
-                messages=[{"role": "user", "content": yoruba_text}],
-                temperature=0.1,
-                max_tokens=4096,
-                extra_body={"direction": "yoruba_to_english", "max_tokens": 4096}
-            )
-            english_text = response.choices[0].message.content.strip()
-            logger.info(f"✅ Translation complete: '{english_text[:100]}...'")
-            return english_text
+            prepared = _apply_glossary(text, language)
+            return _postprocess(self._call(prepared, "en", _iso(language)))
         except Exception as e:
-            logger.error(f"❌ Yoruba→English translation failed: {e}")
-            raise Exception(f"Translation failed: {str(e)}")
-    
-    def english_to_yoruba(self, english_text: str) -> str:
-        if not english_text or not english_text.strip():
-            logger.warning("⚠️ Empty English text provided")
-            return ""
-        try:
-            english_text = self._preprocess_english_for_translation(english_text, "yo")
-            logger.info(f"🔄 Translating English→Yoruba: '{english_text[:100]}...'")
-            response = self.yoruba_client.chat.completions.create(
-                model=self.yoruba_model,
-                messages=[{"role": "user", "content": english_text}],
-                temperature=0.1,
-                max_tokens=4096,
-                extra_body={"direction": "english_to_yoruba", "max_tokens": 4096}
-            )
-            yoruba_text = self._postprocess_common(response.choices[0].message.content.strip())
-            logger.info(f"✅ Translation complete: '{yoruba_text[:100]}...'")
-            return yoruba_text
-        except Exception as e:
-            logger.error(f"❌ English→Yoruba translation failed: {e}")
-            raise Exception(f"Translation failed: {str(e)}")
+            logger.error(f"❌ English→{language} translation failed: {e}")
+            return text
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# HelpMum unified translator — single endpoint, all 3 languages
-# Old NLLBTranslator above is kept as fallback reference
-# ──────────────────────────────────────────────────────────────────────────────
-class HelpMumTranslator:
-    """
-    Translation via the HelpMum unified /translate endpoint.
-    Supports en↔yo, en↔ig, en↔ha in one service.
-    Falls back to NLLBTranslator if the endpoint is unavailable.
-    """
+# ISO codes the translation endpoints expect. Sourced from the registry so a new
+# language needs no entry here.
+def _iso(language_key: str) -> str:
+    from config import get_language
+    return get_language(language_key).whisper_code
 
-    # Valid 2-letter code pairs
-    _VALID_PAIRS = {
-        ("en", "yo"), ("yo", "en"),
-        ("en", "ig"), ("ig", "en"),
-        ("en", "ha"), ("ha", "en"),
-    }
+
+class PivotTranslator(_BaseTranslator):
+    """One HTTP endpoint serving every language pair (TRANSLATOR_URL)."""
 
     def __init__(self, base_url: str = None):
         self.base_url = (base_url or os.getenv("TRANSLATOR_URL", "")).rstrip("/")
-        logger.info(f"✅ HelpMumTranslator initialised — endpoint: {self.base_url or '(not set)'}")
+        logger.info(f"✅ PivotTranslator ready — {self.base_url or '(not set)'}")
 
-    def _translate(self, text: str, src: str, tgt: str) -> str:
-        if not text or not text.strip():
-            return ""
-        if (src, tgt) not in self._VALID_PAIRS:
-            raise ValueError(f"Unsupported translation pair: {src} → {tgt}")
-        # Preprocess English food names before sending to translation model
-        if src == "en":
-            text = NLLBTranslator._preprocess_english_for_translation(text, tgt)
-        url = f"{self.base_url}/translate"
-        logger.info(f"🔄 HelpMum {src}→{tgt}: '{text[:80]}...'")
-        resp = requests.post(url, json={"text": text, "src_lang": src, "tgt_lang": tgt}, timeout=60)
-        resp.raise_for_status()
-        result = resp.json().get("output", "").strip()
-        logger.info(f"✅ HelpMum translation done: '{result[:80]}...'")
-        return NLLBTranslator._postprocess_common(result)
+    def _call(self, text: str, src: str, tgt: str) -> str:
+        if not self.base_url:
+            raise RuntimeError("TRANSLATOR_URL is not configured")
+        logger.info(f"🔄 {src}→{tgt}: '{text[:80]}'")
+        response = requests.post(
+            f"{self.base_url}/translate",
+            json={"text": text, "src_lang": src, "tgt_lang": tgt},
+            timeout=60,
+        )
+        response.raise_for_status()
+        return response.json().get("output", "").strip()
 
-    # ── Public interface matches NLLBTranslator exactly ──
-    def english_to_yoruba(self, text: str) -> str:
-        return self._translate(text, "en", "yo")
 
-    def yoruba_to_english(self, text: str) -> str:
-        return self._translate(text, "yo", "en")
+class NLLBTranslator(_BaseTranslator):
+    """One OpenAI-compatible NLLB endpoint per language.
 
-    def english_to_igbo(self, text: str) -> str:
-        return self._translate(text, "en", "ig")
+    Built from a {language_key: url} map so adding a language is a registry
+    change, not a new attribute and a new pair of methods per direction.
+    """
 
-    def igbo_to_english(self, text: str) -> str:
-        return self._translate(text, "ig", "en")
+    def __init__(self, endpoints: Dict[str, str]):
+        self.clients = {}
+        for language, url in (endpoints or {}).items():
+            if not url:
+                continue
+            normalised = url.rstrip("/")
+            if not normalised.endswith("/v1"):
+                normalised += "/v1"
+            self.clients[language] = {
+                "client": OpenAI(base_url=normalised, api_key="not-needed"),
+                "model": f"nllb-{language}",
+                "url": normalised,
+            }
+        logger.info(f"✅ NLLBTranslator ready — {sorted(self.clients) or 'no endpoints'}")
 
-    def english_to_hausa(self, text: str) -> str:
-        return self._translate(text, "en", "ha")
+    def _language_for_iso(self, iso: str) -> str:
+        from config import LANGUAGES
+        for key, lang in LANGUAGES.items():
+            if lang.whisper_code == iso:
+                return key
+        return iso
 
-    def hausa_to_english(self, text: str) -> str:
-        return self._translate(text, "ha", "en")
+    def _call(self, text: str, src: str, tgt: str) -> str:
+        # Whichever side is not English identifies the endpoint to use.
+        language = self._language_for_iso(tgt if src == "en" else src)
+        entry = self.clients.get(language)
+        if not entry:
+            raise RuntimeError(f"No NLLB endpoint configured for {language}")
+
+        direction = f"english_to_{language}" if src == "en" else f"{language}_to_english"
+        logger.info(f"🔄 NLLB {direction}: '{text[:80]}'")
+        response = entry["client"].chat.completions.create(
+            model=entry["model"],
+            messages=[{"role": "user", "content": text}],
+            temperature=0.1,
+            max_tokens=4096,
+            extra_body={"direction": direction, "max_tokens": 4096},
+        )
+        return response.choices[0].message.content.strip()

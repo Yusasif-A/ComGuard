@@ -1,5 +1,5 @@
 services:
-  whatsapp_chatbot:
+  comguard:
     build:
       context: ..
       dockerfile: whatsapp_chatbot/Dockerfile
@@ -8,3 +8,7 @@ services:
       - .env
     ports:
       - "${PORT:-5001}:${PORT:-5001}"
+    volumes:
+      # The indexed corpus is built with ingest_corpus.py and mounted in, so
+      # rebuilding the image does not mean re-embedding every gazette.
+      - ./comguard_chroma_store:/app/comguard_chroma_store

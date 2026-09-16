@@ -1,5 +1,9 @@
 """
-Hausa Speech-to-Text Service (OpenAI-compatible)
+Speech-to-text for non-English languages (OpenAI-compatible Whisper API).
+
+One class serves every regional language; the endpoint and the ISO code both
+come from the language registry in config.py, so adding Arabic needs no change
+here.
 """
 import os
 import tempfile
@@ -19,18 +23,24 @@ class LocalSpeechToTextError(Exception):
 class LocalSpeechToText:
     """A class to handle speech-to-text conversion using OpenAI-compatible Whisper API for regional languages."""
 
-    def __init__(self, api_url: str, fallback_url: Optional[str] = None):
+    def __init__(self, api_url: str, fallback_url: Optional[str] = None,
+                 language_code: str = "yo"):
         """
-        Initialize the Local STT class
-
         Args:
-            api_url: Primary API URL for STT service
-            fallback_url: Fallback URL to use if primary fails
+            api_url: Primary STT endpoint
+            fallback_url: Endpoint to try when the primary fails
+            language_code: ISO code sent with the request (e.g. "yo", "ar").
+                Bound at construction from the registry, so callers never have
+                to remember which code goes with which service.
         """
         self.primary_url = self._normalize(api_url)
         self.fallback_url = self._normalize(fallback_url) if fallback_url else None
+        self.language_code = language_code
         self.client = self._make_client(self.primary_url)
-        logger.info(f"✅ Local STT initialized: {self.primary_url} | fallback: {self.fallback_url or 'none'}")
+        logger.info(
+            f"✅ Local STT initialized ({self.language_code}): {self.primary_url} "
+            f"| fallback: {self.fallback_url or 'none'}"
+        )
 
     @staticmethod
     def _normalize(url: str) -> str:
@@ -43,12 +53,12 @@ class LocalSpeechToText:
     def _make_client(base_url: str) -> OpenAI:
         return OpenAI(base_url=base_url, api_key="dummy")
 
-    async def transcribe(self, audio_data: bytes, language: str = "ha") -> str:
+    async def transcribe(self, audio_data: bytes, language: str = None) -> str:
         """Convert speech to text using OpenAI-compatible Whisper API.
 
         Args:
             audio_data: Binary audio data
-            language: Language code (e.g., 'ha' for Hausa, 'ig' for Igbo, 'yo' for Yoruba)
+            language: ISO code override; defaults to the one bound at construction
 
         Returns:
             str: Transcribed text
@@ -57,6 +67,7 @@ class LocalSpeechToText:
             ValueError: If the audio file is empty or invalid
             LocalSpeechToTextError: If the transcription fails
         """
+        language = language or self.language_code
         logger.info(f"🎤 Local STT: Transcribing audio ({len(audio_data)} bytes, language: {language})")
         
         if not audio_data:

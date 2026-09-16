@@ -1,5 +1,8 @@
 """
-Hausa Text-to-Speech Service
+Text-to-speech for non-English languages.
+
+One class serves every regional language; the endpoint, model and voice all come
+from the language registry in config.py, so adding Arabic needs no change here.
 """
 import re
 from typing import Optional

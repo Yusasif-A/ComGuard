@@ -1,7 +1,18 @@
+"""
+English text-to-speech (OpenAI-compatible endpoint).
+
+Endpoint, model and voice all come from the ENGLISH_* entry in the language
+registry, so the deployment can swap the voice without a code change.
+"""
+
+import logging
 import os
 import re
 from typing import Literal
+
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -17,7 +28,8 @@ class TextToSpeech:
         self.primary_url = os.getenv("ENGLISH_TTS_BASE_URL", "")
         self.fallback_url = os.getenv("ENGLISH_TTS_FALLBACK_URL", "")
         self.client = OpenAI(api_key="not-needed", base_url=self.primary_url)
-        self.model = "nigerian-english-xtts"
+        self.model = os.getenv("ENGLISH_TTS_MODEL", "nigerian-english-xtts")
+        logger.info(f"✅ English TTS: {self.primary_url} (model: {self.model})")
 
     def _preprocess_text(self, text: str) -> str:
         """Preprocess text by removing markdown formatting.
@@ -79,34 +91,19 @@ class TextToSpeech:
             raise ValueError("Input text exceeds maximum length of 5000 characters")
 
         try:
-            # Show original text
-            print("=" * 80)
-            print("📄 ORIGINAL TEXT RECEIVED BY TTS:")
-            print("=" * 80)
-            print(text)
-            print("=" * 80)
-            
+            logger.info(f"🔊 English TTS: {len(text)} chars")
             # Preprocess text to remove contact info and markdown
             cleaned_text = self._preprocess_text(text)
             
             if not cleaned_text.strip():
                 raise ValueError("Text is empty after preprocessing")
             
-            # Show cleaned text
-            print("🧹 CLEANED TEXT (AFTER PREPROCESSING):")
-            print("=" * 80)
-            print(cleaned_text)
-            print("=" * 80)
-            print(f"📊 Stats: Original={len(text)} chars → Cleaned={len(cleaned_text)} chars (removed {len(text) - len(cleaned_text)} chars)")
-            print(f"🎤 Voice: {voice}")
-            print("=" * 80)
-            
+            logger.debug(f"TTS cleaned {len(text)} → {len(cleaned_text)} chars, voice={voice}")
             try:
                 audio_bytes = self._tts_with_client(self.client, self.primary_url, cleaned_text, voice)
             except Exception as primary_err:
                 if self.fallback_url:
-                    import logging
-                    logging.getLogger(__name__).warning(
+                    logger.warning(
                         f"⚠️ Primary English TTS failed ({primary_err}), switching to fallback: {self.fallback_url}"
                     )
                     fallback_client = OpenAI(api_key="not-needed", base_url=self.fallback_url)
@@ -114,7 +111,7 @@ class TextToSpeech:
                 else:
                     raise TextToSpeechError(f"Text-to-speech conversion failed: {primary_err}") from primary_err
 
-            print(f"TTS Success: Generated {len(audio_bytes)} bytes of audio")
+            logger.info(f"✅ English TTS: {len(audio_bytes)} bytes")
             return audio_bytes
 
         except TextToSpeechError:
@@ -125,7 +122,7 @@ class TextToSpeech:
             raise TextToSpeechError(f"Text-to-speech conversion failed: {str(e)}") from e
 
     def _tts_with_client(self, client: OpenAI, url: str, cleaned_text: str, voice: str) -> bytes:
-        print(f"🔊 English TTS Request → {url}")
+        logger.info(f"🔊 English TTS request → {url}")
         with client.audio.speech.with_streaming_response.create(
             model=self.model,
             voice=voice,
@@ -161,34 +158,19 @@ class TextToSpeech:
             raise ValueError("Input text exceeds maximum length of 5000 characters")
 
         try:
-            # Show original text
-            print("=" * 80)
-            print("📄 ORIGINAL TEXT RECEIVED BY TTS (SYNC):")
-            print("=" * 80)
-            print(text)
-            print("=" * 80)
-            
+            logger.info(f"🔊 English TTS (sync): {len(text)} chars")
             # Preprocess text to remove contact info and markdown
             cleaned_text = self._preprocess_text(text)
             
             if not cleaned_text.strip():
                 raise ValueError("Text is empty after preprocessing")
             
-            # Show cleaned text
-            print("🧹 CLEANED TEXT (AFTER PREPROCESSING):")
-            print("=" * 80)
-            print(cleaned_text)
-            print("=" * 80)
-            print(f"📊 Stats: Original={len(text)} chars → Cleaned={len(cleaned_text)} chars (removed {len(text) - len(cleaned_text)} chars)")
-            print(f"🎤 Voice: {voice}")
-            print("=" * 80)
-            
+            logger.debug(f"TTS cleaned {len(text)} → {len(cleaned_text)} chars, voice={voice}")
             try:
                 audio_bytes = self._tts_with_client(self.client, self.primary_url, cleaned_text, voice)
             except Exception as primary_err:
                 if self.fallback_url:
-                    import logging
-                    logging.getLogger(__name__).warning(
+                    logger.warning(
                         f"⚠️ Primary English TTS (sync) failed ({primary_err}), switching to fallback: {self.fallback_url}"
                     )
                     fallback_client = OpenAI(api_key="not-needed", base_url=self.fallback_url)
@@ -196,7 +178,7 @@ class TextToSpeech:
                 else:
                     raise TextToSpeechError(f"Text-to-speech conversion failed: {primary_err}") from primary_err
 
-            print(f"TTS Success: Generated {len(audio_bytes)} bytes of audio")
+            logger.info(f"✅ English TTS: {len(audio_bytes)} bytes")
             return audio_bytes
             
         except Exception as e:
