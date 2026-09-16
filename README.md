@@ -34,8 +34,8 @@ Send ComGuard a photo, a voice note, and optionally your location. It:
    triggers a public alarm.
 
 Speak or receive replies in **English**, **Yoruba** and **Arabic**, by text or
-voice. Arabic replies are spoken through ElevenLabs; Arabic voice notes are not
-yet transcribed, so Arabic speakers send text or photos and get voice back.
+voice. English and Yoruba use self-hosted speech models; Arabic is heard through
+Deepgram and spoken through ElevenLabs.
 
 **Why WhatsApp:** roughly 95–98% of Nigerian internet users are already on it.
 Nobody has to install anything new.
@@ -46,7 +46,7 @@ Nobody has to install anything new.
 
 - **Gemma Vision** — OCR, hazard classification, real-vs-synthetic image checks
 - **ChromaDB + RAG** — grounding in official municipal and emergency records
-- **Whisper / local TTS / ElevenLabs** — speech in and out, per language
+- **Whisper / Deepgram / ElevenLabs** — speech in and out, per language
 - **FastAPI** — async webhooks, metadata stripping, anonymised routing
 - **MongoDB** — reports, corroboration, conversation memory
 

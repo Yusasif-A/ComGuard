@@ -10,12 +10,14 @@ import logging
 from typing import Dict
 
 from config import (
+    DEEPGRAM_API_KEY,
     ELEVENLABS_API_KEY,
     LANGUAGES,
     TRANSLATOR_URL,
     Language,
     get_language,
 )
+from deepgram_stt import DeepgramSpeechToText
 from elevenlabs_tts import ElevenLabsTextToSpeech
 from local_stt import LocalSpeechToText
 from local_tts import LocalTextToSpeech
@@ -43,12 +45,19 @@ def _build_services():
             _tts_services[key] = TextToSpeech()
             continue
 
-        if lang.can_listen and lang.stt_url:
-            _stt_services[key] = LocalSpeechToText(
-                api_url=lang.stt_url,
-                fallback_url=lang.stt_fallback_url,
-                language_code=lang.whisper_code,
-            )
+        if lang.can_listen:
+            if lang.stt_provider == "deepgram":
+                _stt_services[key] = DeepgramSpeechToText(
+                    api_key=DEEPGRAM_API_KEY,
+                    language_code=lang.whisper_code,
+                    model=lang.stt_model,
+                )
+            elif lang.stt_url:
+                _stt_services[key] = LocalSpeechToText(
+                    api_url=lang.stt_url,
+                    fallback_url=lang.stt_fallback_url,
+                    language_code=lang.whisper_code,
+                )
         if not lang.can_speak:
             continue
 

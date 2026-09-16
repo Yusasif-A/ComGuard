@@ -21,6 +21,10 @@ load_dotenv()
 # <PREFIX>_TTS_PROVIDER=elevenlabs.
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 
+# Deepgram does the same job for speech-to-text: one key, one endpoint, many
+# languages. A language opts in with <PREFIX>_STT_PROVIDER=deepgram.
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
+
 
 # ── Language registry ────────────────────────────────────────────────────────
 
@@ -49,14 +53,30 @@ class Language:
     rtl: bool = False                # right-to-left script (Arabic)
     forced_on: bool = False          # <PREFIX>_ENABLED=true — text-only, no speech endpoints
     tts_provider: str = "openai"     # "openai" (self-hosted) or "elevenlabs"
+    stt_provider: str = "openai"     # "openai" (self-hosted Whisper) or "deepgram"
+    stt_model: str = ""              # provider-specific, e.g. "nova-3"
 
     @property
     def enabled(self) -> bool:
-        return bool(self.stt_url or self.tts_url or self.forced_on)
+        """Offer this language if we can either speak or hear it.
+
+        Derived from the capabilities rather than from a URL, because a provider
+        like ElevenLabs or Deepgram has no per-language endpoint — configuring
+        its key is what makes the language work. `forced_on` remains for a
+        text-only language with no speech support at all.
+        """
+        return bool(self.can_speak or self.can_listen or self.forced_on)
 
     @property
     def can_listen(self) -> bool:
-        """The service can transcribe a voice note in this language."""
+        """The service can transcribe a voice note in this language.
+
+        Deepgram needs no per-language URL — one API covers every language it
+        supports — so for that provider the key is what makes a language
+        listenable.
+        """
+        if self.stt_provider == "deepgram":
+            return bool(DEEPGRAM_API_KEY)
         return bool(self.stt_url) or self.key == "english"
 
     @property
@@ -80,6 +100,7 @@ class Language:
 def _lang(key, label, button_id, whisper_code, env_prefix, *,
           default_tts_model="", default_tts_voice="female",
           default_tts_provider="openai",
+          default_stt_provider="openai", default_stt_model="",
           needs_translation=False, rtl=False) -> Language:
     """Build a Language from the <PREFIX>_* environment variables."""
     def g(suffix, default=""):
@@ -101,6 +122,8 @@ def _lang(key, label, button_id, whisper_code, env_prefix, *,
         rtl=rtl,
         forced_on=g("ENABLED", "").strip().lower() in ("1", "true", "yes"),
         tts_provider=g("TTS_PROVIDER", default_tts_provider).strip().lower(),
+        stt_provider=g("STT_PROVIDER", default_stt_provider).strip().lower(),
+        stt_model=g("STT_MODEL", default_stt_model),
     )
 
 
@@ -124,13 +147,18 @@ YORUBA = _lang(
 # user never wrote. ElevenLabs renders the same sentence correctly — both were
 # checked by transcribing the generated audio back and comparing.
 #
-# Arabic speech-to-text is NOT configured, so an Arabic voice note is answered
-# with a request to type instead. Outbound voice works, inbound does not.
+# Arabic listens through Deepgram for the mirror-image reason: the self-hosted
+# English recogniser is pinned to language="en", so an Arabic voice note run
+# through it comes back as English-sounding nonsense and gets filed as the
+# person's report. Deepgram nova-3 returned the input sentence at 0.97
+# confidence from a WhatsApp-format voice note (ogg/opus, mono, 16kHz).
 ARABIC = _lang(
     "arabic", "العربية", "lang_ar", "ar", "ARABIC",
     default_tts_model="eleven_multilingual_v2",
     default_tts_voice="EXAVITQu4vr4xnSDxMaL",   # Sarah — calm, reassuring
     default_tts_provider="elevenlabs",
+    default_stt_provider="deepgram",
+    default_stt_model="nova-3",
     needs_translation=True,
     rtl=True,
 )
