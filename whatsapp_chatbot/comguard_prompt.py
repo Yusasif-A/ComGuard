@@ -191,6 +191,34 @@ If the person explicitly asks you to write in their own language, do that instea
 """
 
 
+# For a language the model writes well itself, where there is no translation
+# service in front of it. Without this the multilingual rule below would tell it
+# to answer in English and nothing downstream would convert that back.
+def _native_language_rule(label: str) -> str:
+    return f"""
+==================================================
+LANGUAGE — READ THIS CAREFULLY
+==================================================
+
+The person is writing to you in {label}. Understand them in {label} and write
+your ENTIRE reply in {label}. Do not reply in English. Do not add an English
+translation. Do not mix two languages in one reply.
+
+Write the {label} people actually speak, not formal or literary {label}. Short
+sentences, everyday words.
+
+Keep these exactly as given, without translating or reformatting them:
+- emergency and phone numbers
+- names of places, streets and markets
+- names of agencies and officials
+- amounts of money
+- any reference code you are given
+
+If you quote text that was read off a photograph, quote it in the language it
+was written in, then explain it in {label}.
+"""
+
+
 COMGUARD_SYSTEM_PROMPT = _CORE + _ENGLISH_LANGUAGE_RULE + _TEXT_FORMAT
 
 COMGUARD_VOICE_SYSTEM_PROMPT = _CORE + _ENGLISH_LANGUAGE_RULE + _VOICE_FORMAT
@@ -201,8 +229,27 @@ MULTILINGUAL_VOICE_SYSTEM_PROMPT = _CORE + _MULTILINGUAL_LANGUAGE_RULE + _VOICE_
 
 
 def system_prompt_for(language_key: str, is_voice: bool) -> str:
-    """Pick the right prompt. English is the only non-translated language."""
-    multilingual = language_key not in ("english", None, "")
-    if is_voice:
-        return MULTILINGUAL_VOICE_SYSTEM_PROMPT if multilingual else COMGUARD_VOICE_SYSTEM_PROMPT
-    return MULTILINGUAL_SYSTEM_PROMPT if multilingual else COMGUARD_SYSTEM_PROMPT
+    """Pick the prompt for this language and reply mode.
+
+    Three cases, and the distinction is what keeps Arabic in Arabic:
+
+    - English: answer in English.
+    - A language WITH a translation endpoint (Yoruba): answer in English and let
+      the translator render it, because it writes better Yoruba than the model.
+    - A language WITHOUT one (Arabic): answer in that language directly. Sending
+      it down the translation path returns the English untouched, since there is
+      nothing configured to translate it.
+    """
+    from config import get_language
+
+    language = get_language(language_key)
+
+    if language.key == "english":
+        return COMGUARD_VOICE_SYSTEM_PROMPT if is_voice else COMGUARD_SYSTEM_PROMPT
+
+    if language.needs_translation:
+        return (MULTILINGUAL_VOICE_SYSTEM_PROMPT if is_voice
+                else MULTILINGUAL_SYSTEM_PROMPT)
+
+    rule = _native_language_rule(language.label)
+    return _CORE + rule + (_VOICE_FORMAT if is_voice else _TEXT_FORMAT)

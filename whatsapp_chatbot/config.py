@@ -159,7 +159,11 @@ ARABIC = _lang(
     default_tts_provider="elevenlabs",
     default_stt_provider="deepgram",
     default_stt_model="nova-3",
-    needs_translation=True,
+    # Gemma writes Arabic well and there is no Arabic translation endpoint, so
+    # the reply is generated in Arabic rather than translated into it. Marking
+    # this True without an ARABIC_NLLB_URL means the translator has nothing to
+    # call and returns the English text unchanged — the user reads English.
+    needs_translation=False,
     rtl=True,
 )
 

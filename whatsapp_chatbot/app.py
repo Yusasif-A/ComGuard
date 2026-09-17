@@ -1,22 +1,4 @@
-"""
-ComGuard — WhatsApp entry point.
 
-The shape of a report, as it actually arrives:
-
-    photo ──┐
-    voice ──┼──> one draft report ──> guidance to the reporter
-    text  ──┤                     └─> anonymised summary to the authority
-    location┘                     └─> corroboration check ──> maybe a broadcast
-
-People do not send one tidy report. They send a photo, then a voice note, then a
-location, over several minutes — so the pieces attach to a single open draft
-rather than each becoming its own report. That matters beyond tidiness: three
-reports from one person must never look like three witnesses.
-
-The webhook acknowledges Meta immediately and does the real work in a background
-task. Meta retries anything it does not get a fast 200 for, and a retried
-webhook would file the same report twice.
-"""
 
 import asyncio
 import glob
@@ -57,6 +39,7 @@ from config import (
     DASHBOARD_ALLOWED_ORIGINS,
     EMERGENCY_NUMBERS,
     LANGUAGES,
+    get_language,
     language_by_button_id,
     language_button_ids,
 )
@@ -135,16 +118,6 @@ def _concat_mp3(chunks: list) -> bytes:
         return b"".join(chunks)
 
 
-# ── Fixed user-facing strings ────────────────────────────────────────────────
-#
-# Onboarding and prompts are written out per language rather than translated at
-# runtime: they are sent constantly, they never change, and a live translation
-# call on the welcome message is latency spent on text that could have been
-# checked by a person beforehand.
-#
-# ⚠️ The Yoruba below is best-effort and needs a native speaker's review before
-# production. A language with no entry here falls back to English.
-
 UI_STRINGS = {
     "terms": {
         "english": (
@@ -170,6 +143,18 @@ UI_STRINGS = {
             "rẹ ti wá kúrò. Agbègbè gbogbogbò nìkan ni a ó pín fún àwọn aláṣẹ.\n\n"
             "Tẹ *Approve* láti bẹ̀rẹ̀."
         ),
+        "arabic": (
+            "👋 *مرحبًا بك في ComGuard*\n\n"
+            "أساعدك على الإبلاغ عن نوعين من المشكلات وعلى حماية نفسك:\n\n"
+            "🌊 *الطوارئ* — الفيضانات، الحرائق، انهيار طريق أو جسر، طريق مسدود\n"
+            "🚨 *الاحتيال* — إشعارات رسمية مزيفة، جباة ضرائب غير رسميين، "
+            "نقاط تفتيش غير قانونية، إيصالات مزورة\n\n"
+            "أرسل لي صورة أو رسالة صوتية، أو اكتب ما يحدث.\n\n"
+            "*خصوصيتك:* رقم هاتفك لا يُرفق أبدًا بأي بلاغ. تُحذف بيانات موقع "
+            "الصور. ولا تتم مشاركة سوى المنطقة العامة مع الجهات المختصة.\n\n"
+            "بمتابعتك فإنك توافق على شروط الاستخدام وسياسة الخصوصية.\n\n"
+            "اضغط *Approve* للبدء."
+        ),
     },
     "ready": {
         "english": (
@@ -190,6 +175,15 @@ UI_STRINGS = {
             "O lè fi wọ́n ránṣẹ́ ní ọ̀kọ̀ọ̀kan — èmi yóò kó wọn pọ̀.\n\n"
             f"Tí ẹnikẹ́ni bá wà nínú ewu báyìí, kọ́kọ́ pe {EMERGENCY_NUMBERS}."
         ),
+        "arabic": (
+            "✅ كل شيء جاهز.\n\n"
+            "أرسل لي:\n"
+            "📷 *صورة* لما تراه\n"
+            "🎤 *رسالة صوتية* تشرح الأمر\n"
+            "📍 *موقعك* (اضغط 📎 ← الموقع) لأوجّه البلاغ إلى الجهة الصحيحة\n\n"
+            "يمكنك إرسالها واحدة تلو الأخرى — سأجمعها معًا.\n\n"
+            f"إذا كان أحد في خطر الآن، اتصل أولًا بـ {EMERGENCY_NUMBERS}."
+        ),
     },
     "need_location": {
         "english": (
@@ -202,6 +196,11 @@ UI_STRINGS = {
             "A ó lo ó láti kìlọ̀ fún àwọn tí ó wà nítòsí nìkan, a ó sì sọ ọ́ di "
             "agbègbè gbogbogbò kí ẹlòmíràn tó rí i. O lè fo èyí."
         ),
+        "arabic": (
+            "📍 إذا كان الأمر آمنًا، شارك موقعك — اضغط 📎 ثم *الموقع*.\n"
+            "يُستخدم فقط لتحذير من هم قريبون منك، ويُحوَّل إلى منطقة عامة قبل "
+            "أن يراه أي شخص آخر. يمكنك تخطي هذه الخطوة."
+        ),
     },
     "report_filed": {
         "english": (
@@ -212,14 +211,20 @@ UI_STRINGS = {
             "📋 A ti kọ ìròyìn rẹ sílẹ̀ gẹ́gẹ́ bí *{report_id}*. Pa àmì yìí mọ́.\n"
             "{routing}"
         ),
+        "arabic": (
+            "📋 تم تسجيل بلاغك برقم *{report_id}*. احتفظ بهذا الرقم.\n"
+            "{routing}"
+        ),
     },
     "routing_sent": {
         "english": "It has been sent to the relevant agency without your phone number.",
         "yoruba": "A ti fi ránṣẹ́ sí ilé-iṣẹ́ tí ó yẹ láì fi nọ́mbà rẹ kún un.",
+        "arabic": "تم إرساله إلى الجهة المختصة دون رقم هاتفك.",
     },
     "routing_held": {
         "english": "It is waiting for a dispatcher to review it.",
         "yoruba": "Ó ń dúró de aláṣẹ láti ṣàyẹ̀wò rẹ̀.",
+        "arabic": "في انتظار مراجعته من قبل أحد المسؤولين.",
     },
     "alerts_offer": {
         "english": (
@@ -232,6 +237,11 @@ UI_STRINGS = {
             "Èmi yóò kàn sí ọ nìkan nígbà tí ó bá kéré tán ènìyàn méjì ọ̀tọ̀ọ̀tọ̀ bá "
             "ròyìn ohun kan náà nítòsí, tàbí tí aláṣẹ bá jẹ́rìí sí i. Kò sí ìránṣẹ́ ojoojúmọ́."
         ),
+        "arabic": (
+            "🔔 هل تريد أن أحذرك عند الإبلاغ عن حادث خطير قريب منك؟\n\n"
+            "لن أراسلك إلا إذا أبلغ شخصان مختلفان على الأقل عن الأمر نفسه في "
+            "منطقتك، أو أكّده مسؤول. لا رسائل يومية."
+        ),
     },
     "alerts_on": {
         "english": (
@@ -242,10 +252,15 @@ UI_STRINGS = {
             "🔔 Ó ti parí — èmi yóò kìlọ̀ fún ọ nípa ewu tí a jẹ́rìí sí nítòsí ibí yìí.\n"
             "Fi *STOP* ránṣẹ́ nígbàkigbà láti pa á."
         ),
+        "arabic": (
+            "🔔 تم — سأحذرك من الحوادث المؤكدة قرب هذا الموقع.\n"
+            "أرسل *STOP* في أي وقت لإيقاف ذلك."
+        ),
     },
     "alerts_off": {
         "english": "🔕 Area alerts are off. You can still report anything to me at any time.",
         "yoruba": "🔕 Ìkìlọ̀ agbègbè ti parí. O ṣì lè ròyìn ohunkóhun fún mi nígbàkigbà.",
+        "arabic": "🔕 تم إيقاف تنبيهات المنطقة. لا يزال بإمكانك الإبلاغ عن أي شيء في أي وقت.",
     },
     "alerts_need_location": {
         "english": (
@@ -255,6 +270,10 @@ UI_STRINGS = {
         "yoruba": (
             "📍 Kí n lè kìlọ̀ fún ọ nípa ewu tí ó wà nítòsí rẹ, mo nílò láti mọ̀ níbi "
             "tí o wà. Pín ibi tí o wà (tẹ 📎 → *Location*) èmi yóò sì tan ìkìlọ̀."
+        ),
+        "arabic": (
+            "📍 لكي أحذرك من الحوادث القريبة، أحتاج إلى معرفة مكانك تقريبًا. "
+            "شارك موقعك (اضغط 📎 ← *الموقع*) وسأفعّل التنبيهات."
         ),
     },
     "distress": {
@@ -268,10 +287,16 @@ UI_STRINGS = {
             "Kọ́kọ́ wá ibi àìléwu. Nígbà tí o bá lè ṣe é, sọ ohun tí ó ń ṣẹlẹ̀ fún mi — "
             "àwòrán, ohùn, tàbí ọ̀rọ̀ díẹ̀."
         ),
+        "arabic": (
+            f"إذا كنت في خطر الآن، اتصل بـ {EMERGENCY_NUMBERS}.\n\n"
+            "انتقل أولًا إلى مكان آمن. وعندما تستطيع، أخبرني بما يحدث — "
+            "صورة أو رسالة صوتية أو بضع كلمات."
+        ),
     },
     "photo_failed": {
         "english": "I couldn't open that photo. Please send it again, or just tell me what you're seeing.",
         "yoruba": "Mi ò lè ṣí àwòrán yẹn. Jọ̀wọ́ fi í ránṣẹ́ lẹ́ẹ̀kan sí i, tàbí sọ ohun tí o ń rí fún mi.",
+        "arabic": "لم أتمكن من فتح هذه الصورة. أعد إرسالها، أو أخبرني بما تراه.",
     },
     "no_voice_input": {
         "english": (
@@ -284,14 +309,20 @@ UI_STRINGS = {
             "أمر مهم. من فضلك اكتب ما يحدث، أو أرسل صورة. يمكنك أيضًا التحويل إلى "
             "الإنجليزية لاستخدام الصوت."
         ),
+        "yoruba": (
+            "Mi ò tíì lè gbọ́ ohùn ní èdè yìí — mo lè ṣì ohun pàtàkì gbọ́. "
+            "Jọ̀wọ́ kọ ohun tí ó ń ṣẹlẹ̀, tàbí fi àwòrán ránṣẹ́."
+        ),
     },
     "voice_failed": {
         "english": "I couldn't hear that clearly. Please try again, or type what is happening.",
         "yoruba": "Mi ò gbọ́ ọ̀rọ̀ yẹn kedere. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i, tàbí kọ ohun tí ó ń ṣẹlẹ̀.",
+        "arabic": "لم أسمع ذلك بوضوح. حاول مرة أخرى، أو اكتب ما يحدث.",
     },
     "unsupported": {
         "english": "I can read text, listen to voice notes, look at photos, and use your location.",
         "yoruba": "Mo lè ka ìkọ̀wé, gbọ́ ohùn, wo àwòrán, kí n sì lo ibi tí o wà.",
+        "arabic": "يمكنني قراءة النصوص، والاستماع إلى الرسائل الصوتية، والنظر إلى الصور، واستخدام موقعك.",
     },
     "error": {
         "english": (
@@ -301,6 +332,10 @@ UI_STRINGS = {
         "yoruba": (
             "Nǹkan kan bàjẹ́ ní ọ̀dọ̀ mi. Jọ̀wọ́ fi í ránṣẹ́ lẹ́ẹ̀kan sí i.\n"
             f"Tí ẹnikẹ́ni bá wà nínú ewu, pe {EMERGENCY_NUMBERS} báyìí."
+        ),
+        "arabic": (
+            "حدث خطأ من جهتي. أعد إرسال رسالتك.\n"
+            f"إذا كان أحد في خطر، اتصل بـ {EMERGENCY_NUMBERS} الآن."
         ),
     },
 }
@@ -874,7 +909,11 @@ async def process_message(message: dict, from_number: str):
             await send_message(from_number, ui("error", language))
             return
 
-        if language != "english":
+        # Only languages with a translation endpoint take this path. Arabic is
+        # written in Arabic by the model itself; translating it would be a round
+        # trip through English at best, and a silent fallback to English at
+        # worst — which is what happened before.
+        if get_language(language).needs_translation:
             response = await asyncio.to_thread(translate_out, response, language)
 
         response = clean_for_whatsapp(response)
