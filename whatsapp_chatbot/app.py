@@ -823,6 +823,13 @@ async def process_message(message: dict, from_number: str):
 
         # ── Photo ────────────────────────────────────────────────────────
         if message_type == "image":
+            # The reply matches how they contacted us. A photo sent on its own
+            # usually means typing is not an option — hands full, panicking, or
+            # unable to read — so that answer is spoken. A photo with a caption
+            # shows they can and do type, so the answer is written.
+            caption = (message.get("image", {}) or {}).get("caption", "") or ""
+            reply_with_voice = not caption.strip()
+
             draft = reports.open_draft(thread_id, language)
             try:
                 agent_context, patch = await handle_image(message, draft, language)
