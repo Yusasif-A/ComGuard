@@ -1,23 +1,71 @@
-# Secrets — never commit real credentials.
+# ── Secrets — never commit real credentials ─────────────────────────────────
 .env
 .env.*
 !.env.example
 *.env-example
 .env-example
+*.pem
+*.key
+*.p12
+credentials.json
+service-account*.json
+secrets.json
 
+# ── Personal data ───────────────────────────────────────────────────────────
+# Anything that could carry a real phone number, a report, or a conversation.
+delete.py
+whatsapp_chatbot/delete.py
+*_export_*.json
+conversations_export*.json
+*.csv
+reports_dump*
+dashboard_export*
+
+# ── Internal working notes — not for the public repo ────────────────────────
+CHANGES_SUMMARY.md
+NOTES.md
+TODO.md
+scratch/
+scratchpad/
+ys.md
+
+# ── Built or downloaded data ────────────────────────────────────────────────
+# The vector store is rebuilt locally with ingest_corpus.py.
+comguard_chroma_store/
+*_chroma_store/
+chroma.sqlite3
+
+# Source documents for the corpus — gazettes and law PDFs are large, and the
+# folder is a convenient place for someone to drop a file that is not public.
+corpus/
+documents/
+*.pdf
+
+# Audio probes and any generated speech.
+tts_samples/
+*.mp3
+*.ogg
+*.wav
+*.m4a
+
+# ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-.DS_Store
-.vscode/
-.idea/
+*$py.class
 .venv/
 venv/
+env/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
 
-# Vector store is built locally by ingest_corpus.py, not tracked.
-comguard_chroma_store/
+# ── Editors and OS ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
 
-# Local scratch
+# ── Logs ────────────────────────────────────────────────────────────────────
 *.log
-
-# Local TTS probe output — listen to these, do not commit them.
-tts_samples/
+logs/
