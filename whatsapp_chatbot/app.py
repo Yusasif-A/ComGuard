@@ -125,10 +125,10 @@ UI_STRINGS = {
             "I help you report and stay safe from two kinds of trouble:\n\n"
             "🌊 *Emergencies* — flooding, fire, a collapsed road or bridge, a blocked route\n"
             "🚨 *Scams* — fake public notices, unofficial 'tax' collectors, unlawful checkpoints, forged receipts\n\n"
-            "You can send me a picture / voice of what is happening, I will tell you what to do .\n\n"
+            "You can send me a picture / voice of what is happening, and I will help send the report to the right government authority.\n\n"
             "*Your privacy:* your phone number is never attached to a report. "
-            "Photo location tags are removed. Only a general area is shared with "
-            "the authorities.\n\n"
+            "Photo location tags are removed. Your location helps us alert OTHER people "
+            "nearby so they can avoid danger areas and stay safe.\n\n"
             "By continuing you agree to the Terms of Use and Privacy Policy.\n\n"
             "Tap *Approve* to begin."
         ),
@@ -138,9 +138,11 @@ UI_STRINGS = {
             "🌊 *Ewu* — ìkún omi, iná, afárá tàbí ọ̀nà tí ó wó, ọ̀nà tí ó dí\n"
             "🚨 *Ìwà ẹ̀tàn* — ìwé ìkéde èké, àwọn tí ń gba owó orí láìjẹ́ ti ìjọba, "
             "ibùdó ìdálẹ́kun àìtọ́, ìwé ẹ̀rí owó èké\n\n"
-            "Fi àwòrán, ohùn, tàbí kọ ohun tí ó ń ṣẹlẹ̀ ránṣẹ́ sí mi.\n\n"
+            "Fi àwòrán, ohùn, tàbí kọ ohun tí ó ń ṣẹlẹ̀ ránṣẹ́ sí mi, èmi yóò ràn ọ́ lọ́wọ́ "
+            "láti fi ròyìn sí ilé-iṣẹ́ ìjọba tí ó tọ́.\n\n"
             "*Àṣírí rẹ:* nọ́mbà rẹ kì í tẹ̀lé ìròyìn rẹ. A ó mú àmì ibi tí àwòrán "
-            "rẹ ti wá kúrò. Agbègbè gbogbogbò nìkan ni a ó pín fún àwọn aláṣẹ.\n\n"
+            "rẹ ti wá kúrò. Ibi tí o wà ń ràn wá lọ́wọ́ láti kìlọ̀ fún ÀWỌN ẸLÒMÍRÀN "
+            "kí wọ́n lè yẹra fún ewu.\n\n"
             "Tẹ *Approve* láti bẹ̀rẹ̀."
         ),
         "arabic": (
@@ -149,9 +151,11 @@ UI_STRINGS = {
             "🌊 *الطوارئ* — الفيضانات، الحرائق، انهيار طريق أو جسر، طريق مسدود\n"
             "🚨 *الاحتيال* — إشعارات رسمية مزيفة، جباة ضرائب غير رسميين، "
             "نقاط تفتيش غير قانونية، إيصالات مزورة\n\n"
-            "أرسل لي صورة أو رسالة صوتية، أو اكتب ما يحدث.\n\n"
+            "أرسل لي صورة أو رسالة صوتية، وسأساعدك في إرسال البلاغ إلى "
+            "الجهة الحكومية المختصة.\n\n"
             "*خصوصيتك:* رقم هاتفك لا يُرفق أبدًا بأي بلاغ. تُحذف بيانات موقع "
-            "الصور. ولا تتم مشاركة سوى المنطقة العامة مع الجهات المختصة.\n\n"
+            "الصور. يساعدنا موقعك على تحذير الآخرين القريبين لتجنب مناطق الخطر "
+            "والبقاء آمنين.\n\n"
             "بمتابعتك فإنك توافق على شروط الاستخدام وسياسة الخصوصية.\n\n"
             "اضغط *Approve* للبدء."
         ),
@@ -179,18 +183,18 @@ UI_STRINGS = {
     "need_location": {
         "english": (
             "📍 If it's safe to do so, share your location — tap 📎 then *Location*.\n"
-            "It's only used to warn people nearby and is blurred to a general area "
-            "before anyone else sees it. You can skip this."
+            "This helps us alert OTHER people nearby so they can avoid the area "
+            "and stay safe. You can skip this."
         ),
         "yoruba": (
             "📍 Tí ó bá léwu, pín ibi tí o wà — tẹ 📎 lẹ́yìn náà *Location*.\n"
-            "A ó lo ó láti kìlọ̀ fún àwọn tí ó wà nítòsí nìkan, a ó sì sọ ọ́ di "
-            "agbègbè gbogbogbò kí ẹlòmíràn tó rí i. O lè fo èyí."
+            "Èyí ń ràn wá lọ́wọ́ láti kìlọ̀ fún ÀWỌN ẸLÒMÍRÀN tí ó wà nítòsí "
+            "kí wọ́n lè yẹra fún ibẹ̀. O lè fo èyí."
         ),
         "arabic": (
             "📍 إذا كان الأمر آمنًا، شارك موقعك — اضغط 📎 ثم *الموقع*.\n"
-            "يُستخدم فقط لتحذير من هم قريبون منك، ويُحوَّل إلى منطقة عامة قبل "
-            "أن يراه أي شخص آخر. يمكنك تخطي هذه الخطوة."
+            "يساعدنا هذا على تحذير الآخرين القريبين لتجنب المنطقة "
+            "والبقاء آمنين. يمكنك تخطي هذه الخطوة."
         ),
     },
     "report_filed": {
@@ -551,9 +555,9 @@ async def transcribe(message: dict, language: str) -> str:
 async def synthesise(text: str, language: str) -> Optional[bytes]:
     """Speak a reply. Returns None when the language has no voice configured.
 
-    Sentence-by-sentence and in parallel: a single call on a long reply is slower
-    than the whole conversation can afford, and one failed sentence then loses
-    the entire answer instead of a few words of it.
+    Sentence-by-sentence but SEQUENTIAL (not parallel) to avoid hitting ElevenLabs
+    concurrent request limits (max 2 concurrent). One failed sentence loses only
+    a few words instead of the entire answer.
     """
     service = get_tts_service(language)
     if not service:
@@ -563,17 +567,13 @@ async def synthesise(text: str, language: str) -> Optional[bytes]:
     sentences = [s.strip() for s in _SENTENCE_RE.split(text) if len(s.strip()) > 3] or [text]
     voice = get_voice(language)
 
-    tasks = [
-        asyncio.create_task(
-            asyncio.to_thread(service.synthesize_sync, numbers_to_words(s, language), voice)
-        )
-        for s in sentences
-    ]
-
     parts = []
-    for task in tasks:
+    for sentence in sentences:
         try:
-            parts.append(await task)
+            audio = await asyncio.to_thread(
+                service.synthesize_sync, numbers_to_words(sentence, language), voice
+            )
+            parts.append(audio)
         except Exception as e:
             logger.warning(f"⚠️ TTS failed for one sentence: {e}")
 

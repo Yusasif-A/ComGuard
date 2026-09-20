@@ -63,8 +63,9 @@ async def forward_to_authority(report: dict) -> bool:
 
     if not destination:
         logger.info(
-            f"📭 No authority endpoint for '{category}' — report "
-            f"{report.get('report_id')} stored for dashboard review only"
+            f"📭 No authority endpoint configured for '{category}' — report "
+            f"{report.get('report_id')} stored for dashboard review. "
+            f"In production, this would be sent to the appropriate agency."
         )
         return False
 
@@ -125,9 +126,10 @@ _ALERT_ADVICE = {
 def build_alert_message(report: dict, language_label: str = "") -> str:
     """The English broadcast text. Translated per recipient before sending.
 
-    Written to stand alone: somebody receiving this has not been in a
-    conversation and has no context, so it says what, roughly where, what to do,
-    and — importantly — that it is based on reports rather than confirmed fact.
+    Written to stand alone: somebody receiving this has not been in a conversation 
+    and has no context, so it says what, roughly where, what to do, and that it 
+    is based on reports rather than confirmed fact. This alert helps people AVOID 
+    the dangerous area.
     """
     category = report.get("category") or "other"
     headline = _ALERT_HEADLINES.get(category, _ALERT_HEADLINES["other"])
@@ -146,6 +148,8 @@ def build_alert_message(report: dict, language_label: str = "") -> str:
         f"⚠️ *{headline}*",
         "",
         f"Reported near {place}. {basis}",
+        "",
+        "🚫 Avoid this area if possible to stay safe.",
         "",
         advice,
     ]
