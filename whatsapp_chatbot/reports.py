@@ -378,11 +378,19 @@ def mark_dismissed(report_id: str, dispatcher: str = "", note: str = "") -> bool
     })
 
 
-def mark_forwarded(report_id: str, destination: str, ok: bool) -> None:
+def mark_forwarded(report_id: str, destination: str, ok: bool,
+                   with_location: bool = False) -> None:
+    """Record a dispatch attempt.
+
+    `with_location` is what stops a report being re-sent forever: it says the
+    agency now holds the coordinates, so later messages on the same report do
+    not trigger another update.
+    """
     update_report(report_id, {
         "forwarded_at": datetime.now(timezone.utc),
         "forwarded_to": destination,
         "forward_ok": ok,
+        "forwarded_with_location": with_location,
     })
 
 

@@ -109,3 +109,6 @@ INFO:     197.159.74.29:0 - "POST /whatsapp HTTP/1.1" 200 OK
 
 for forfirs dusaster  right aurheoty wll be norifed  wwn rreplyig to users , for bridgge collapres an soe on right atheiry will be notiifed ad so on    
 so i dhodlfnt just say you can report to teh auetut , kt shodul say shoulf flag this to th rght auhrruty .. for exlation , ot just say wi lll flag this to thememtm the agecy immeduaryyl 
+
+
+

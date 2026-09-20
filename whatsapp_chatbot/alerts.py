@@ -50,7 +50,7 @@ BROADCAST_SEVERITIES = ("high", "critical")
 
 # ── Authority dispatch ───────────────────────────────────────────────────────
 
-async def forward_to_authority(report: dict) -> bool:
+async def forward_to_authority(report: dict, is_update: bool = False) -> bool:
     """POST the anonymised report to the agency for its category.
 
     Returns False when no endpoint is configured — that is a normal state during
@@ -62,6 +62,12 @@ async def forward_to_authority(report: dict) -> bool:
     destination = authority_webhook_for(category)
 
     if not destination:
+        # Nothing is configured to receive this yet. Record that the report is
+        # location-complete anyway, so it does not retry on every later message.
+        mark_forwarded(
+            report.get("report_id", ""), "", False,
+            with_location=bool((report.get("location") or {}).get("lat") is not None),
+        )
         logger.info(
             f"📭 No authority endpoint configured for '{category}' — report "
             f"{report.get('report_id')} stored for dashboard review. "
@@ -70,6 +76,10 @@ async def forward_to_authority(report: dict) -> bool:
         return False
 
     payload = anonymise_report_payload(report)
+    # The agency keys on report_id, so a second send for the same id is an
+    # update rather than a duplicate incident. Said explicitly so a dispatcher
+    # is not left deciding whether two rows are two collapsed bridges.
+    payload["is_update"] = is_update
     headers = {"Content-Type": "application/json"}
     if AUTHORITY_WEBHOOK_TOKEN:
         headers["Authorization"] = f"Bearer {AUTHORITY_WEBHOOK_TOKEN}"
@@ -85,7 +95,10 @@ async def forward_to_authority(report: dict) -> bool:
                 f"❌ Authority rejected {payload['report_id']}: "
                 f"{response.status_code} {response.text[:200]}"
             )
-        mark_forwarded(report["report_id"], destination, ok)
+        mark_forwarded(
+            report["report_id"], destination, ok,
+            with_location=bool((report.get("location") or {}).get("lat") is not None),
+        )
         return ok
     except Exception as e:
         logger.error(f"❌ Could not forward {payload['report_id']}: {e}")

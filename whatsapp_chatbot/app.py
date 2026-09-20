@@ -197,6 +197,23 @@ UI_STRINGS = {
             "والبقاء آمنين. يمكنك تخطي هذه الخطوة."
         ),
     },
+    "location_received": {
+        "english": (
+            "📍 Got your location{place}.\n"
+            "It goes to the agency with your report so they know where to respond, "
+            "and it lets us warn people nearby to avoid the area."
+        ),
+        "yoruba": (
+            "📍 A ti gba ibi tí o wà{place}.\n"
+            "A ó fi ránṣẹ́ pẹ̀lú ìròyìn rẹ kí ilé-iṣẹ́ tó yẹ lè mọ ibi tí wọ́n yóò lọ, "
+            "yóò sì jẹ́ kí a kìlọ̀ fún àwọn tí ó wà nítòsí kí wọ́n yẹra fún ibẹ̀."
+        ),
+        "arabic": (
+            "📍 تم استلام موقعك{place}.\n"
+            "سيُرسل مع بلاغك حتى تعرف الجهة المختصة أين تتوجه، ويساعدنا على تحذير "
+            "من هم قريبون منك لتجنب المنطقة."
+        ),
+    },
     "report_filed": {
         "english": (
             "📋 Your report is logged as *{report_id}*. Keep that reference.\n"
@@ -609,9 +626,16 @@ async def advance_report(draft: dict, phone: str, language: str) -> Optional[str
     else:
         report = reports.get_report(report_id) or draft
 
+    # A photo usually arrives before the location, so the first forward often
+    # carries no coordinates — which leaves the agency with a report it cannot
+    # respond to. Send it again, once, when the location finally lands.
+    has_location = bool((report.get("location") or {}).get("lat") is not None)
+    already_sent = bool(report.get("forwarded_at"))
+    location_still_missing_at_agency = has_location and not report.get("forwarded_with_location")
+
     routing_key = "routing_held"
-    if not report.get("forwarded_at"):
-        if await alerts.forward_to_authority(report):
+    if not already_sent or location_still_missing_at_agency:
+        if await alerts.forward_to_authority(report, is_update=already_sent):
             routing_key = "routing_sent"
         report = reports.get_report(report_id) or report
     elif report.get("forward_ok"):
@@ -1030,6 +1054,15 @@ async def handle_location(message: dict, from_number: str,
 
     place = location.get("name") or location.get("address") or ""
     logger.info(f"[bg] 📍 Location from {from_number}: {lat:.4f},{lon:.4f} {place}")
+
+    # Acknowledge it straight away. Sharing a location is an act of trust, and
+    # silence afterwards reads as the message having gone nowhere — which is
+    # what happened before: the next thing the person saw was an unexplained
+    # opt-in prompt, or nothing at all if no report was open yet.
+    await send_message(
+        from_number,
+        ui("location_received", language, place=f" — {place}" if place else ""),
+    )
 
     draft = reports.open_draft(thread_id, language)
     reports.update_report(draft["report_id"], {
