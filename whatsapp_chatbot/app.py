@@ -125,7 +125,7 @@ UI_STRINGS = {
             "I help you report and stay safe from two kinds of trouble:\n\n"
             "🌊 *Emergencies* — flooding, fire, a collapsed road or bridge, a blocked route\n"
             "🚨 *Scams* — fake public notices, unofficial 'tax' collectors, unlawful checkpoints, forged receipts\n\n"
-            "Send me a photo, a voice note, or just type what is happening.\n\n"
+            "You can send me a picture / voice of what is happening, I will tell you what to do .\n\n"
             "*Your privacy:* your phone number is never attached to a report. "
             "Photo location tags are removed. Only a general area is shared with "
             "the authorities.\n\n"
@@ -156,35 +156,26 @@ UI_STRINGS = {
             "اضغط *Approve* للبدء."
         ),
     },
-    "ready": {
-        "english": (
-            "✅ You're set up.\n\n"
-            "Send me:\n"
-            "📷 a *photo* of what you're seeing\n"
-            "🎤 a *voice note* explaining it\n"
-            "📍 your *location* (tap 📎 → Location) so I can route it correctly\n\n"
-            "You can send them one at a time — I'll put them together.\n\n"
-            f"If someone is in danger right now, call {EMERGENCY_NUMBERS} first."
-        ),
-        "yoruba": (
-            "✅ Ó ti ṣetán.\n\n"
-            "Fi ránṣẹ́ sí mi:\n"
-            "📷 *àwòrán* ohun tí o ń rí\n"
-            "🎤 *ohùn* tí ó ṣàlàyé rẹ̀\n"
-            "📍 *ibi tí o wà* (tẹ 📎 → Location) kí n lè fi ránṣẹ́ sí ibi tí ó tọ́\n\n"
-            "O lè fi wọ́n ránṣẹ́ ní ọ̀kọ̀ọ̀kan — èmi yóò kó wọn pọ̀.\n\n"
-            f"Tí ẹnikẹ́ni bá wà nínú ewu báyìí, kọ́kọ́ pe {EMERGENCY_NUMBERS}."
-        ),
-        "arabic": (
-            "✅ كل شيء جاهز.\n\n"
-            "أرسل لي:\n"
-            "📷 *صورة* لما تراه\n"
-            "🎤 *رسالة صوتية* تشرح الأمر\n"
-            "📍 *موقعك* (اضغط 📎 ← الموقع) لأوجّه البلاغ إلى الجهة الصحيحة\n\n"
-            "يمكنك إرسالها واحدة تلو الأخرى — سأجمعها معًا.\n\n"
-            f"إذا كان أحد في خطر الآن، اتصل أولًا بـ {EMERGENCY_NUMBERS}."
-        ),
-    },
+"ready": {
+    "english": (
+        "✅ You're ready.\n\n"
+        "Send a photo of what you see, or a voice note explaining the problem.\n"
+        "I will tell you what to do next.\n\n"
+        f"If someone is in immediate danger, call {EMERGENCY_NUMBERS} first."
+    ),
+    "yoruba": (
+        "✅ Ó ti ṣetán.\n\n"
+        "Fi àwòrán ohun tí o rí ránṣẹ́, tàbí ohùn kan tí ó ṣàlàyé iṣòro náà.\n"
+        "Èmi yóò sọ fún ọ ohun tí o ní láti ṣe.\n\n"
+        f"Tí ẹnikẹ́ni bá wà nínú ewu lẹ́sẹ̀kẹsẹ̀, kọ́kọ́ pe {EMERGENCY_NUMBERS}."
+    ),
+    "arabic": (
+        "✅ أنت جاهز.\n\n"
+        "أرسل صورة لما تراه، أو رسالة صوتية تشرح المشكلة.\n"
+        "وسأخبرك بما يجب فعله بعد ذلك.\n\n"
+        f"إذا كان أحد في خطر فوري، اتصل أولًا بـ {EMERGENCY_NUMBERS}."
+    ),
+},
     "need_location": {
         "english": (
             "📍 If it's safe to do so, share your location — tap 📎 then *Location*.\n"
